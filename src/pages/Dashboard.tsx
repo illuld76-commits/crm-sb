@@ -71,6 +71,9 @@ export default function Dashboard() {
   const [showFilters, setShowFilters] = useState(false);
   const [expandedCases, setExpandedCases] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<'active' | 'archived'>('active');
+  const [pendingCaseCount, setPendingCaseCount] = useState(0);
+  const [outstandingInvoiceCount, setOutstandingInvoiceCount] = useState(0);
+  const [dueThisWeekCount, setDueThisWeekCount] = useState(0);
 
   // Delete confirmation dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -108,6 +111,22 @@ export default function Dashboard() {
         setPlans(planData || []);
       }
     }
+    // Fetch KPI data
+    const [{ count: pendingCount }, { data: invoiceData }, { data: caseData }] = await Promise.all([
+      supabase.from('case_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending').eq('is_deleted', false),
+      supabase.from('invoices').select('status, balance_due, is_deleted').eq('is_deleted', false),
+      supabase.from('case_requests').select('created_at, status, is_deleted').eq('is_deleted', false).in('status', ['pending', 'accepted', 'in_progress']),
+    ]);
+    setPendingCaseCount(pendingCount || 0);
+    setOutstandingInvoiceCount((invoiceData || []).filter((i: any) => ['sent', 'partially_paid'].includes(i.status)).length);
+    const now = new Date();
+    const weekEnd = new Date(now);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    setDueThisWeekCount((caseData || []).filter((c: any) => {
+      const d = new Date(c.created_at);
+      return d <= weekEnd;
+    }).length);
+
     setLoading(false);
   };
 
@@ -379,6 +398,54 @@ export default function Dashboard() {
       </header>
 
       <main className="container mx-auto px-4 py-8 space-y-5">
+        {/* KPI Stats Row */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <Card className="cursor-pointer hover:shadow-md transition-shadow group" onClick={() => { setActiveTab('active'); setSearch(''); }}>
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                <LayoutGrid className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Active Cases</p>
+                <p className="text-lg font-bold">{activePatients.length}</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="cursor-pointer hover:shadow-md transition-shadow group" onClick={() => navigate('/submitted-cases')}>
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center group-hover:bg-orange-200 dark:group-hover:bg-orange-900/50 transition-colors">
+                <Filter className="w-5 h-5 text-orange-600" />
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Pending Review</p>
+                <p className="text-lg font-bold">{pendingCaseCount}</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="cursor-pointer hover:shadow-md transition-shadow group" onClick={() => navigate('/billing')}>
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50 transition-colors">
+                <Users className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Outstanding Invoices</p>
+                <p className="text-lg font-bold">{outstandingInvoiceCount}</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className={`cursor-pointer hover:shadow-md transition-shadow group ${dueThisWeekCount > 0 ? 'ring-1 ring-destructive/30' : ''}`} onClick={() => navigate('/kanban')}>
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center group-hover:bg-destructive/20 transition-colors">
+                <Columns3 className="w-5 h-5 text-destructive" />
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Due This Week</p>
+                <p className="text-lg font-bold">{dueThisWeekCount}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold">Cases</h1>
