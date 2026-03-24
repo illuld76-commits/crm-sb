@@ -71,6 +71,9 @@ export default function Dashboard() {
   const [showFilters, setShowFilters] = useState(false);
   const [expandedCases, setExpandedCases] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<'active' | 'archived'>('active');
+  const [pendingCaseCount, setPendingCaseCount] = useState(0);
+  const [outstandingInvoiceCount, setOutstandingInvoiceCount] = useState(0);
+  const [dueThisWeekCount, setDueThisWeekCount] = useState(0);
 
   // Delete confirmation dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
