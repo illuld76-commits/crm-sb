@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snapon Braces — License Generator</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0a0a0a; color: #e5e5e5; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+    .card { background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 2rem; max-width: 500px; width: 100%; }
+    h1 { font-size: 1.25rem; margin-bottom: 0.25rem; }
+    .sub { color: #888; font-size: 0.8rem; margin-bottom: 1.5rem; }
+    label { display: block; font-size: 0.8rem; color: #aaa; margin-bottom: 0.25rem; margin-top: 1rem; }
+    input { width: 100%; padding: 0.5rem 0.75rem; background: #111; border: 1px solid #333; border-radius: 6px; color: #e5e5e5; font-size: 0.9rem; }
+    input:focus { outline: none; border-color: #22c55e; }
+    button { margin-top: 1.5rem; width: 100%; padding: 0.6rem; background: #22c55e; color: #000; border: none; border-radius: 6px; font-weight: 600; font-size: 0.9rem; cursor: pointer; }
+    button:hover { background: #16a34a; }
+    .output { margin-top: 1rem; }
+    textarea { width: 100%; height: 80px; background: #111; border: 1px solid #333; border-radius: 6px; color: #22c55e; font-family: monospace; font-size: 0.75rem; padding: 0.5rem; resize: none; }
+    .warn { color: #f59e0b; font-size: 0.7rem; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🔐 License Generator</h1>
+    <p class="sub">Generate admin license tokens for Snapon Braces. Run this offline only.</p>
+
+    <label for="email">Admin Email</label>
+    <input type="email" id="email" placeholder="admin@snaponbraces.com" />
+
+    <label for="secret">License Secret Key</label>
+    <input type="password" id="secret" placeholder="Your 64-character secret key" />
+
+    <button onclick="generateLicense()">Generate License Token</button>
+
+    <div class="output" id="outputArea" style="display:none;">
+      <label>License Token</label>
+      <textarea id="tokenOutput" readonly></textarea>
+      <button onclick="copyToken()" style="background:#333;color:#e5e5e5;margin-top:0.5rem;">Copy to Clipboard</button>
+    </div>
+
+    <p class="warn">⚠ Never share your secret key. This page runs entirely in your browser.</p>
+  </div>
+
+  <script>
+    async function hmacSign(message, secret) {
+      const enc = new TextEncoder();
+      const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+      const sig = await crypto.subtle.sign('HMAC', key, enc.encode(message));
+      return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function generateLicense() {
+      const email = document.getElementById('email').value.trim();
+      const secret = document.getElementById('secret').value;
+
+      if (!email || !secret) { alert('Email and secret key are required'); return; }
+
+      const issued_at = new Date().toISOString();
+      const signature = await hmacSign(email + issued_at, secret);
+      const token = btoa(JSON.stringify({ email, issued_at, signature }));
+
+      document.getElementById('tokenOutput').value = token;
+      document.getElementById('outputArea').style.display = 'block';
+    }
+
+    function copyToken() {
+      const el = document.getElementById('tokenOutput');
+      el.select();
+      navigator.clipboard.writeText(el.value);
+      alert('Copied!');
+    }
+  </script>
+</body>
+</html>

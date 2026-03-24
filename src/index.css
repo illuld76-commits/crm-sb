@@ -1,96 +1,100 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Space+Grotesk:wght@300..700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
-
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 210 20% 98%;
+    --foreground: 200 25% 10%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 200 25% 10%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 200 25% 10%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 187 65% 38%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 200 20% 94%;
+    --secondary-foreground: 200 25% 15%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 200 15% 95%;
+    --muted-foreground: 200 10% 45%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 170 50% 92%;
+    --accent-foreground: 187 65% 25%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 200 18% 90%;
+    --input: 200 18% 90%;
+    --ring: 187 65% 38%;
 
-    --radius: 0.5rem;
+    --radius: 0.625rem;
 
-    --sidebar-background: 0 0% 98%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 200 10% 30%;
+    --sidebar-primary: 187 65% 38%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 170 50% 95%;
+    --sidebar-accent-foreground: 187 65% 25%;
+    --sidebar-border: 200 18% 92%;
+    --sidebar-ring: 187 65% 38%;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    /* Custom tokens */
+    --success: 152 60% 40%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --info: 210 80% 55%;
+    --info-foreground: 0 0% 100%;
 
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --ipr-low: 152 60% 40%;
+    --ipr-medium: 38 92% 50%;
+    --ipr-high: 0 72% 51%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 200 25% 7%;
+    --foreground: 200 15% 93%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 200 20% 10%;
+    --card-foreground: 200 15% 93%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 200 20% 10%;
+    --popover-foreground: 200 15% 93%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 187 65% 45%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 200 15% 15%;
+    --secondary-foreground: 200 15% 90%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 200 15% 15%;
+    --muted-foreground: 200 10% 55%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 187 30% 15%;
+    --accent-foreground: 187 65% 60%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 62% 35%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+    --border: 200 15% 18%;
+    --input: 200 15% 18%;
+    --ring: 187 65% 45%;
+
+    --sidebar-background: 200 20% 8%;
+    --sidebar-foreground: 200 10% 80%;
+    --sidebar-primary: 187 65% 45%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-accent: 187 30% 12%;
+    --sidebar-accent-foreground: 187 65% 60%;
+    --sidebar-border: 200 15% 15%;
+    --sidebar-ring: 187 65% 45%;
   }
 }
 
@@ -101,5 +105,88 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+    font-family: 'DM Sans', system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .dental-gradient {
+    background: linear-gradient(135deg, hsl(187 65% 38%) 0%, hsl(170 50% 45%) 100%);
+  }
+}
+
+/* Print styles for PDF export */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 11pt !important;
+  }
+
+  .print\\:hidden, nav, header button, .dental-gradient {
+    display: none !important;
+  }
+
+  .print\\:bg-white { background: white !important; }
+  .print\\:shadow-none { box-shadow: none !important; }
+  .print\\:border { border: 1px solid #ddd !important; }
+  .print\\:py-4 { padding-top: 1rem !important; padding-bottom: 1rem !important; }
+  .print\\:pt-4 { padding-top: 1rem !important; }
+  .print\\:space-y-4 > * + * { margin-top: 1rem !important; }
+  .print\\:overflow-visible { overflow: visible !important; }
+  .print\\:static { position: static !important; }
+
+  /* Ensure tables fit */
+  table {
+    page-break-inside: avoid;
+    width: 100% !important;
+    font-size: 9pt !important;
+  }
+
+  /* Cards in print */
+  .card, [class*="Card"] {
+    break-inside: avoid;
+    box-shadow: none !important;
+    border: 1px solid #e5e7eb !important;
+  }
+
+  /* Images */
+  img {
+    max-height: 300px !important;
+    object-fit: contain !important;
+    page-break-inside: avoid;
+  }
+
+  /* IPR tables */
+  .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  /* Charts */
+  .recharts-wrapper {
+    page-break-inside: avoid;
+  }
+
+  /* Hide interactive elements */
+  button, input, select, textarea {
+    display: none !important;
+  }
+
+  /* But show static content in print */
+  .print\\:block { display: block !important; }
+
+  /* Page margins */
+  @page {
+    margin: 1.5cm;
+    size: A4;
+  }
+
+  /* Ensure good page breaks */
+  h1, h2, h3, h4 {
+    page-break-after: avoid;
   }
 }
