@@ -90,7 +90,7 @@ export default function GlobalKanban() {
         } as EnrichedPlan;
       });
       setPlans(enriched);
-      setCaseRequests((cases || []) as CaseItem[]);
+      setCaseRequests((cases || []) as unknown as CaseItem[]);
       setLoading(false);
     };
     fetchData();
