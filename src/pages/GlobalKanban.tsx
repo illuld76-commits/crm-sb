@@ -9,10 +9,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Progress } from '@/components/ui/progress';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { format } from 'date-fns';
-import { Calendar, Lock, Search, ArrowUpDown, CheckCircle2, XCircle, Ban, Eye } from 'lucide-react';
+import { format, differenceInDays, differenceInHours } from 'date-fns';
+import { Calendar, Lock, Search, ArrowUpDown, CheckCircle2, XCircle, Ban, Eye, Paperclip, User, MessageSquare, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { PlanWithContext } from '@/types';
 import { logAction } from '@/lib/audit';
@@ -36,6 +37,16 @@ interface CaseItem {
   display_id?: string;
   clinic_name?: string;
   doctor_name?: string;
+  notes?: string;
+  attachments?: { name: string }[];
+  priority?: string;
+  expected_due_date?: string;
+}
+
+interface EnrichedPlan extends PlanWithContext {
+  doctor_name?: string;
+  remarks_count?: number;
+  attachment_count?: number;
 }
 
 type SortOption = 'date_desc' | 'date_asc' | 'name_az' | 'name_za';
@@ -44,27 +55,39 @@ export default function GlobalKanban() {
   const { user } = useAuth();
   const { isAdmin } = useRole();
   const navigate = useNavigate();
-  const [plans, setPlans] = useState<PlanWithContext[]>([]);
+  const [plans, setPlans] = useState<EnrichedPlan[]>([]);
   const [caseRequests, setCaseRequests] = useState<CaseItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeView, setActiveView] = useState('plans');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('date_desc');
   const [caseFilterStatus, setCaseFilterStatus] = useState('all');
+  const [filterDoctor, setFilterDoctor] = useState('all');
 
   useEffect(() => {
     const fetchData = async () => {
-      const [{ data: patients }, { data: phases }, { data: planData }, { data: cases }] = await Promise.all([
-        supabase.from('patients').select('id, patient_name').is('archived_at', null),
+      const [{ data: patients }, { data: phases }, { data: planData }, { data: cases }, { data: remarkCounts }] = await Promise.all([
+        supabase.from('patients').select('id, patient_name, doctor_name').is('archived_at', null),
         supabase.from('phases').select('id, patient_id, phase_name'),
         supabase.from('treatment_plans').select('*').order('sort_order'),
-        supabase.from('case_requests').select('id, patient_name, status, request_type, created_at, display_id, clinic_name, doctor_name').eq('is_deleted', false),
+        supabase.from('case_requests').select('id, patient_name, status, request_type, created_at, display_id, clinic_name, doctor_name, notes, attachments, is_deleted').eq('is_deleted', false),
+        supabase.from('plan_remarks').select('plan_id'),
       ]);
+
+      const remarkMap: Record<string, number> = {};
+      remarkCounts?.forEach((r: any) => { remarkMap[r.plan_id] = (remarkMap[r.plan_id] || 0) + 1; });
 
       const enriched = (planData || []).map(plan => {
         const phase = phases?.find(ph => ph.id === plan.phase_id);
         const patient = patients?.find(p => p.id === phase?.patient_id);
-        return { ...plan, patient_name: patient?.patient_name || 'Unknown', patient_id: patient?.id || '', phase_name: phase?.phase_name || '' } as PlanWithContext;
+        return {
+          ...plan,
+          patient_name: patient?.patient_name || 'Unknown',
+          patient_id: patient?.id || '',
+          phase_name: phase?.phase_name || '',
+          doctor_name: (patient as any)?.doctor_name || undefined,
+          remarks_count: remarkMap[plan.id] || 0,
+        } as EnrichedPlan;
       });
       setPlans(enriched);
       setCaseRequests((cases || []) as CaseItem[]);
@@ -73,9 +96,12 @@ export default function GlobalKanban() {
     fetchData();
   }, []);
 
+  const uniqueDoctors = useMemo(() => [...new Set(plans.map(p => p.doctor_name).filter(Boolean))] as string[], [plans]);
+
   const filteredPlans = useMemo(() => {
     let result = plans;
     if (search) result = result.filter(p => p.patient_name.toLowerCase().includes(search.toLowerCase()) || p.plan_name.toLowerCase().includes(search.toLowerCase()));
+    if (filterDoctor !== 'all') result = result.filter(p => p.doctor_name === filterDoctor);
     result.sort((a, b) => {
       switch (sortBy) {
         case 'name_az': return a.patient_name.localeCompare(b.patient_name);
@@ -85,7 +111,7 @@ export default function GlobalKanban() {
       }
     });
     return result;
-  }, [plans, search, sortBy]);
+  }, [plans, search, sortBy, filterDoctor]);
 
   const filteredCases = useMemo(() => {
     let result = caseRequests;
@@ -103,7 +129,7 @@ export default function GlobalKanban() {
   }, [caseRequests, search, sortBy, caseFilterStatus]);
 
   const planColumnsData = useMemo(() => {
-    const data: Record<string, PlanWithContext[]> = {};
+    const data: Record<string, EnrichedPlan[]> = {};
     PLAN_COLUMNS.forEach(col => { data[col.id] = filteredPlans.filter(p => p.status === col.id); });
     return data;
   }, [filteredPlans]);
@@ -134,6 +160,14 @@ export default function GlobalKanban() {
     return map[s] || 'bg-muted-foreground';
   };
 
+  const getSlaInfo = (createdAt: string) => {
+    const days = differenceInDays(new Date(), new Date(createdAt));
+    const slaDays = 14; // default SLA
+    const pct = Math.min((days / slaDays) * 100, 100);
+    const color = pct >= 100 ? 'bg-destructive' : pct >= 75 ? 'bg-yellow-500' : 'bg-primary';
+    return { pct, color, daysLeft: Math.max(slaDays - days, 0) };
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header title="Kanban Board" />
@@ -146,6 +180,15 @@ export default function GlobalKanban() {
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Search..." className="pl-9 h-9" value={search} onChange={e => setSearch(e.target.value)} />
           </div>
+          {activeView === 'plans' && uniqueDoctors.length > 0 && (
+            <Select value={filterDoctor} onValueChange={setFilterDoctor}>
+              <SelectTrigger className="w-32 h-9 text-xs"><SelectValue placeholder="Doctor" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Doctors</SelectItem>
+                {uniqueDoctors.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
           {activeView === 'cases' && (
             <Select value={caseFilterStatus} onValueChange={setCaseFilterStatus}>
               <SelectTrigger className="w-32 h-9 text-xs"><SelectValue /></SelectTrigger>
@@ -175,7 +218,7 @@ export default function GlobalKanban() {
           <DragDropContext onDragEnd={onPlanDragEnd}>
             <div className="flex gap-4 overflow-x-auto pb-4 min-h-[600px]">
               {PLAN_COLUMNS.map(column => (
-                <div key={column.id} className="flex-shrink-0 w-72 flex flex-col gap-3">
+                <div key={column.id} className="flex-shrink-0 w-80 flex flex-col gap-3">
                   <div className="flex items-center gap-2 px-2">
                     <div className={`w-2 h-2 rounded-full ${column.color}`} />
                     <h3 className="font-semibold text-sm">{column.title}</h3>
@@ -186,30 +229,60 @@ export default function GlobalKanban() {
                       <div {...provided.droppableProps} ref={provided.innerRef}
                         className={`flex-1 rounded-lg border border-dashed p-2 transition-colors ${snapshot.isDraggingOver ? 'bg-accent/50 border-accent' : 'bg-muted/30 border-border/50'}`}>
                         <div className="space-y-2">
-                          {planColumnsData[column.id]?.map((plan, index) => (
-                            <Draggable key={plan.id} draggableId={plan.id} index={index} isDragDisabled={!isAdmin}>
-                              {(provided, snapshot) => (
-                                <Card ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}
-                                  className={`shadow-sm hover:shadow-md transition-shadow cursor-pointer ${snapshot.isDragging ? 'ring-2 ring-primary' : ''}`}
-                                  onClick={() => navigate(`/plan/${plan.id}`)}>
-                                  <CardContent className="p-3 space-y-1">
-                                    <div className="flex items-center gap-1">
-                                      <h4 className="font-bold text-sm truncate">{plan.patient_name}</h4>
-                                      {plan.is_finalized && <Lock className="w-3 h-3 text-yellow-500" />}
-                                    </div>
-                                    <div className="flex flex-wrap gap-1">
-                                      <Badge variant="outline" className="text-[9px] h-4">{plan.phase_name}</Badge>
-                                      <span className="text-[10px] text-muted-foreground">{plan.plan_name}</span>
-                                    </div>
-                                    <div className="text-[10px] text-muted-foreground flex items-center gap-1">
-                                      <Calendar className="w-3 h-3" />
-                                      {plan.plan_date ? format(new Date(plan.plan_date), 'MMM d') : 'No date'}
-                                    </div>
-                                  </CardContent>
-                                </Card>
-                              )}
-                            </Draggable>
-                          ))}
+                          {planColumnsData[column.id]?.map((plan, index) => {
+                            const sla = getSlaInfo(plan.created_at);
+                            return (
+                              <Draggable key={plan.id} draggableId={plan.id} index={index} isDragDisabled={!isAdmin}>
+                                {(provided, snapshot) => (
+                                  <Card ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}
+                                    className={`shadow-sm hover:shadow-md transition-shadow cursor-pointer ${snapshot.isDragging ? 'ring-2 ring-primary' : ''}`}
+                                    onClick={() => navigate(`/plan/${plan.id}`)}>
+                                    <CardContent className="p-3 space-y-2">
+                                      <div className="flex items-center justify-between gap-1">
+                                        <h4 className="font-bold text-sm truncate">{plan.patient_name}</h4>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                          {plan.is_finalized && <Lock className="w-3 h-3 text-yellow-500" />}
+                                          {sla.daysLeft <= 2 && sla.pct < 100 && <AlertTriangle className="w-3 h-3 text-yellow-500" />}
+                                        </div>
+                                      </div>
+                                      <div className="flex flex-wrap gap-1">
+                                        <Badge variant="outline" className="text-[9px] h-4">{plan.phase_name}</Badge>
+                                        <span className="text-[10px] text-muted-foreground truncate">{plan.plan_name}</span>
+                                      </div>
+                                      {plan.doctor_name && (
+                                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                          <User className="w-3 h-3" />
+                                          <span className="truncate">{plan.doctor_name}</span>
+                                        </div>
+                                      )}
+                                      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                                        <div className="flex items-center gap-2">
+                                          <span className="flex items-center gap-0.5">
+                                            <Calendar className="w-3 h-3" />
+                                            {plan.plan_date ? format(new Date(plan.plan_date), 'MMM d') : 'No date'}
+                                          </span>
+                                          {(plan.remarks_count || 0) > 0 && (
+                                            <span className="flex items-center gap-0.5">
+                                              <MessageSquare className="w-3 h-3" />
+                                              {plan.remarks_count}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                      {/* SLA Progress */}
+                                      <div className="space-y-0.5">
+                                        <div className="flex items-center justify-between text-[9px] text-muted-foreground">
+                                          <span>SLA</span>
+                                          <span>{sla.daysLeft}d left</span>
+                                        </div>
+                                        <Progress value={sla.pct} className="h-1" />
+                                      </div>
+                                    </CardContent>
+                                  </Card>
+                                )}
+                              </Draggable>
+                            );
+                          })}
                           {provided.placeholder}
                         </div>
                       </div>
@@ -220,62 +293,70 @@ export default function GlobalKanban() {
             </div>
           </DragDropContext>
         ) : (
-          /* Case Approval Queue — no drag-and-drop */
+          /* Case Approval Queue */
           <div className="space-y-3">
             {filteredCases.length === 0 ? (
               <p className="text-center py-10 text-muted-foreground">No case requests found</p>
-            ) : filteredCases.map(c => (
-              <Card key={c.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${statusColor(c.status)}`} />
-                      <span className="font-medium text-sm">{c.patient_name}</span>
-                      <Badge variant="outline" className="text-[10px]">{c.status.replace('_', ' ')}</Badge>
-                      {c.display_id && <span className="text-[10px] text-muted-foreground font-mono">{c.display_id}</span>}
+            ) : filteredCases.map(c => {
+              const attachCount = Array.isArray(c.attachments) ? c.attachments.length : 0;
+              return (
+                <Card key={c.id} className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${statusColor(c.status)}`} />
+                        <span className="font-medium text-sm">{c.patient_name}</span>
+                        <Badge variant="outline" className="text-[10px]">{c.status.replace('_', ' ')}</Badge>
+                        {c.display_id && <span className="text-[10px] text-muted-foreground font-mono">{c.display_id}</span>}
+                        {attachCount > 0 && (
+                          <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                            <Paperclip className="w-3 h-3" /> {attachCount}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {c.request_type} • {format(new Date(c.created_at), 'MMM d, yyyy')}
+                        {c.doctor_name && ` • ${c.doctor_name}`}
+                        {c.clinic_name && ` • ${c.clinic_name}`}
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {c.request_type} • {format(new Date(c.created_at), 'MMM d, yyyy')}
-                      {c.doctor_name && ` • ${c.doctor_name}`}
-                      {c.clinic_name && ` • ${c.clinic_name}`}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {isAdmin && (
+                        <>
+                          {c.status === 'pending' && (
+                            <>
+                              <Button variant="ghost" size="sm" className="text-green-600 h-8" onClick={() => updateCaseStatus(c.id, 'accepted')} title="Accept">
+                                <CheckCircle2 className="w-4 h-4" />
+                              </Button>
+                              <Button variant="ghost" size="sm" className="text-destructive h-8" onClick={() => updateCaseStatus(c.id, 'rejected')} title="Reject">
+                                <XCircle className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
+                          {c.status === 'accepted' && (
+                            <Button variant="ghost" size="sm" className="text-blue-600 h-8 text-xs" onClick={() => updateCaseStatus(c.id, 'in_progress')}>Start</Button>
+                          )}
+                          {(c.status === 'in_progress' || c.status === 'accepted') && (
+                            <Button variant="ghost" size="sm" className="text-orange-500 h-8 text-xs" onClick={() => updateCaseStatus(c.id, 'on_hold')}>Hold</Button>
+                          )}
+                          {(c.status === 'in_progress' || c.status === 'on_hold') && (
+                            <Button variant="ghost" size="sm" className="text-purple-600 h-8 text-xs" onClick={() => updateCaseStatus(c.id, 'completed')}>Done</Button>
+                          )}
+                          {c.status !== 'discarded' && c.status !== 'completed' && (
+                            <Button variant="ghost" size="sm" className="text-destructive h-8" onClick={() => updateCaseStatus(c.id, 'discarded')} title="Discard">
+                              <Ban className="w-3 h-3" />
+                            </Button>
+                          )}
+                        </>
+                      )}
+                      <Button variant="ghost" size="sm" className="h-8" onClick={() => navigate(`/work-order/${c.id}`)}>
+                        <Eye className="w-4 h-4" />
+                      </Button>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {isAdmin && (
-                      <>
-                        {c.status === 'pending' && (
-                          <>
-                            <Button variant="ghost" size="sm" className="text-green-600 h-8" onClick={() => updateCaseStatus(c.id, 'accepted')} title="Accept">
-                              <CheckCircle2 className="w-4 h-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm" className="text-destructive h-8" onClick={() => updateCaseStatus(c.id, 'rejected')} title="Reject">
-                              <XCircle className="w-4 h-4" />
-                            </Button>
-                          </>
-                        )}
-                        {c.status === 'accepted' && (
-                          <Button variant="ghost" size="sm" className="text-blue-600 h-8 text-xs" onClick={() => updateCaseStatus(c.id, 'in_progress')}>Start</Button>
-                        )}
-                        {(c.status === 'in_progress' || c.status === 'accepted') && (
-                          <Button variant="ghost" size="sm" className="text-orange-500 h-8 text-xs" onClick={() => updateCaseStatus(c.id, 'on_hold')}>Hold</Button>
-                        )}
-                        {(c.status === 'in_progress' || c.status === 'on_hold') && (
-                          <Button variant="ghost" size="sm" className="text-purple-600 h-8 text-xs" onClick={() => updateCaseStatus(c.id, 'completed')}>Done</Button>
-                        )}
-                        {c.status !== 'discarded' && c.status !== 'completed' && (
-                          <Button variant="ghost" size="sm" className="text-destructive h-8" onClick={() => updateCaseStatus(c.id, 'discarded')} title="Discard">
-                            <Ban className="w-3 h-3" />
-                          </Button>
-                        )}
-                      </>
-                    )}
-                    <Button variant="ghost" size="sm" className="h-8" onClick={() => navigate(`/case-submission/${c.id}`)}>
-                      <Eye className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </main>
