@@ -111,6 +111,22 @@ export default function Dashboard() {
         setPlans(planData || []);
       }
     }
+    // Fetch KPI data
+    const [{ count: pendingCount }, { data: invoiceData }, { data: caseData }] = await Promise.all([
+      supabase.from('case_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending').eq('is_deleted', false),
+      supabase.from('invoices').select('status, balance_due, is_deleted').eq('is_deleted', false),
+      supabase.from('case_requests').select('created_at, status, is_deleted').eq('is_deleted', false).in('status', ['pending', 'accepted', 'in_progress']),
+    ]);
+    setPendingCaseCount(pendingCount || 0);
+    setOutstandingInvoiceCount((invoiceData || []).filter((i: any) => ['sent', 'partially_paid'].includes(i.status)).length);
+    const now = new Date();
+    const weekEnd = new Date(now);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    setDueThisWeekCount((caseData || []).filter((c: any) => {
+      const d = new Date(c.created_at);
+      return d <= weekEnd;
+    }).length);
+
     setLoading(false);
   };
 
