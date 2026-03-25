@@ -911,7 +911,8 @@ export default function PatientDetail() {
                 {assets.filter(a => isAdmin || a.is_viewable).map(asset => (
                   <Card key={asset.id} className="p-3 space-y-2">
                     {asset.file_type.startsWith('image') ? (
-                      <img src={asset.file_url} alt={asset.original_name || ''} className="w-full rounded-lg object-cover h-40" />
+                      <img src={asset.file_url} alt={asset.original_name || ''} className="w-full rounded-lg object-cover h-40 cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => setAssetPreviewFile({ name: asset.original_name || asset.category, url: asset.file_url, type: asset.file_type, size: 0 })} />
                     ) : asset.file_type.startsWith('video') ? (
                       <video src={asset.file_url} controls className="w-full rounded-lg h-40 object-cover" />
                     ) : asset.file_type === 'application/pdf' ? (
@@ -1120,6 +1121,11 @@ export default function PatientDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <FilePreviewModal
+        file={assetPreviewFile}
+        isOpen={!!assetPreviewFile}
+        onClose={() => setAssetPreviewFile(null)}
+      />
     </div>
   );
 }
