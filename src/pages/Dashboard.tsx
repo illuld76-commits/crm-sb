@@ -277,9 +277,14 @@ export default function Dashboard() {
                       <div className="flex items-center gap-1">
                         {plan.plan_date && <span className="text-muted-foreground text-[10px]">{format(new Date(plan.plan_date), 'MMM d')}</span>}
                         {plan.share_token && plan.status === 'published' && (
-                          <Button variant="ghost" size="icon" className="h-5 w-5" onClick={e => { e.stopPropagation(); copyLink(plan.share_token!, 'report', e); }} title="Copy report link">
-                            <Copy className="w-2.5 h-2.5" />
-                          </Button>
+                          <>
+                            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={e => { e.stopPropagation(); copyLink(plan.share_token!, 'report', e); }} title="Copy report link">
+                              <Copy className="w-2.5 h-2.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={e => { e.stopPropagation(); window.open(`${window.location.origin}/report/${plan.share_token}`, '_blank'); }} title="Open published report">
+                              <ChevronRight className="w-2.5 h-2.5" />
+                            </Button>
+                          </>
                         )}
                       </div>
                     </div>
