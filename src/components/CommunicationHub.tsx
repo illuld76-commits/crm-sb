@@ -350,12 +350,27 @@ export default function CommunicationHub({ caseId, relatedType, relatedId }: Com
             ))}
           </div>
         )}
+        {/* @Mention dropdown */}
+        {showMentions && filteredMentionProfiles.length > 0 && (
+          <div className="absolute bottom-full left-0 right-0 bg-popover border border-border rounded-lg shadow-lg mb-1 mx-3 max-h-32 overflow-y-auto z-20">
+            {filteredMentionProfiles.map(p => (
+              <button
+                key={p.user_id}
+                className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent flex items-center gap-2"
+                onClick={() => insertMention(p.display_name || p.user_id.slice(0, 8))}
+              >
+                <AtSign className="w-3 h-3 text-muted-foreground" />
+                {p.display_name || p.user_id.slice(0, 8)}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex gap-2">
           <Button variant="ghost" size="icon" className="shrink-0 h-9 w-9" onClick={() => fileInputRef.current?.click()}>
             <Paperclip className="w-4 h-4" />
           </Button>
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={e => { if (e.target.files) setPendingFiles(prev => [...prev, ...Array.from(e.target.files!)]); e.target.value = ''; }} />
-          <Input value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Type a message..." className="text-sm"
+          <Input value={newMessage} onChange={e => handleMessageInput(e.target.value)} placeholder="Type a message... use @ to mention" className="text-sm"
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()} />
           <Button size="icon" onClick={sendMessage} disabled={(!newMessage.trim() && pendingFiles.length === 0) || uploading}>
             <Send className="w-4 h-4" />
