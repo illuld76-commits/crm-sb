@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { FileUp, X, Loader2, ArrowLeft, FileText, Image, Film, Music, Box, CheckCircle2, XCircle, Play, Pause, CircleCheck, Ban, ExternalLink, Download, UserPlus } from 'lucide-react';
+import { FileUp, X, Loader2, ArrowLeft, FileText, Image, Film, Music, Box, CheckCircle2, XCircle, Play, Pause, CircleCheck, Ban, ExternalLink, Download, UserPlus, Trash2 } from 'lucide-react';
 import { logAction } from '@/lib/audit';
 import { sendNotification } from '@/lib/notifications';
 import { FileAttachment, Preset, CaseRequest } from '@/types';
