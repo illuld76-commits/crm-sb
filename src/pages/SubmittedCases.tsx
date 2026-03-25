@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { Search, CheckCircle2, XCircle, Eye, Download, ArrowUpDown, Ban, Play, Pause, CircleCheck } from 'lucide-react';
+import { Search, CheckCircle2, XCircle, Eye, Download, ArrowUpDown, Ban, Play, Pause, CircleCheck, Trash2, UserPlus } from 'lucide-react';
 import { CaseRequest } from '@/types';
 
 type SortOption = 'date_desc' | 'date_asc' | 'name_az' | 'name_za';
