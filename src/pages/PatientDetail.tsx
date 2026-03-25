@@ -261,7 +261,14 @@ export default function PatientDetail() {
     setInvoices(invData || []);
     setAssets(assetData || []);
     if (isAdmin) {
-      const { data: logData } = await supabase.from('audit_logs').select('id, action, target_name, user_name, details, created_at').eq('target_id', patientId).order('created_at', { ascending: false }).limit(50);
+      // Fetch audit logs for this case AND related entities (plans, phases, invoices)
+      const phaseIds = (phaseData || []).map(ph => ph.id);
+      const planIds = planData ? planData.map(pl => pl.id) : [];
+      const allTargetIds = [patientId, ...phaseIds, ...planIds];
+      const { data: logData } = await supabase.from('audit_logs')
+        .select('id, action, target_name, user_name, details, created_at')
+        .in('target_id', allTargetIds)
+        .order('created_at', { ascending: false }).limit(100);
       setAuditLogs(logData || []);
     }
 
