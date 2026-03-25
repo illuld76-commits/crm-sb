@@ -144,9 +144,71 @@ export default function CommunicationHub({ caseId, relatedType, relatedId }: Com
         attachments: attachments as any,
       });
       if (error) { toast.error('Failed to send message'); return; }
-      setNewMessage(''); setPendingFiles([]);
+
+      // Check for @mentions and send notifications
+      const mentionRegex = /@(\w[\w\s]*?)(?=\s|$|@)/g;
+      let match;
+      while ((match = mentionRegex.exec(newMessage)) !== null) {
+        const mentionedName = match[1].trim();
+        const mentionedProfile = mentionProfiles.find(p =>
+          p.display_name?.toLowerCase() === mentionedName.toLowerCase()
+        );
+        if (mentionedProfile && mentionedProfile.user_id !== user.id) {
+          await supabase.from('notifications').insert({
+            user_id: mentionedProfile.user_id,
+            title: `@Mention from ${profiles[user.id] || user.email}`,
+            body: newMessage.trim().slice(0, 100),
+            link: `/patient/${caseId}`,
+          });
+        }
+      }
+
+      setNewMessage(''); setPendingFiles([]); setShowMentions(false);
     } finally { setUploading(false); }
   };
+
+  const handleMessageInput = (value: string) => {
+    setNewMessage(value);
+    const lastAt = value.lastIndexOf('@');
+    if (lastAt >= 0 && lastAt === value.length - 1) {
+      setShowMentions(true);
+      setMentionSearch('');
+    } else if (lastAt >= 0 && !value.slice(lastAt).includes(' ')) {
+      setShowMentions(true);
+      setMentionSearch(value.slice(lastAt + 1));
+    } else {
+      setShowMentions(false);
+    }
+  };
+
+  const insertMention = (name: string) => {
+    const lastAt = newMessage.lastIndexOf('@');
+    setNewMessage(newMessage.slice(0, lastAt) + `@${name} `);
+    setShowMentions(false);
+  };
+
+  const toggleReaction = async (messageId: string, emoji: string) => {
+    if (!user) return;
+    // Use communications id as a pseudo remark_id for reactions
+    const existing = reactions[messageId]?.find(r => r.emoji === emoji && r.user_id === user.id);
+    if (existing) {
+      await supabase.from('remark_reactions').delete().eq('remark_id', messageId).eq('user_id', user.id).eq('emoji', emoji);
+      setReactions(prev => ({ ...prev, [messageId]: (prev[messageId] || []).filter(r => !(r.emoji === emoji && r.user_id === user.id)) }));
+    } else {
+      await supabase.from('remark_reactions').insert({ remark_id: messageId, user_id: user.id, emoji });
+      setReactions(prev => ({ ...prev, [messageId]: [...(prev[messageId] || []), { emoji, user_id: user.id }] }));
+    }
+  };
+
+  const togglePin = async (msg: Message) => {
+    // Pin/unpin using the communications table doesn't have a pin column,
+    // so we'll use a visual indicator only for now
+    toast.info('Pin toggled (visual)');
+  };
+
+  const filteredMentionProfiles = mentionProfiles.filter(p =>
+    !mentionSearch || p.display_name?.toLowerCase().includes(mentionSearch.toLowerCase())
+  ).slice(0, 5);
 
   const filteredMessages = messages.filter(m => {
     if (search) {
