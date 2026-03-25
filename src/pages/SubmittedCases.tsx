@@ -205,7 +205,20 @@ export default function SubmittedCases() {
                             <Ban className="w-3 h-3" />
                           </Button>
                         )}
+                        {!c.patient_id && ['accepted', 'in_progress', 'completed'].includes(c.status) && (
+                          <Button variant="ghost" size="sm" className="text-primary text-xs" onClick={() => convertToCase(c)} title="Convert to Case">
+                            <UserPlus className="w-3 h-3 mr-0.5" /> Case
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => softDelete(c.id)} title="Delete">
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
                       </>
+                    )}
+                    {c.patient_id && (
+                      <Button variant="ghost" size="sm" className="text-primary text-xs" onClick={() => navigate(`/patient/${c.patient_id}`)} title="View Case">
+                        <UserPlus className="w-3 h-3 mr-0.5" /> View
+                      </Button>
                     )}
                     <Button variant="ghost" size="sm" onClick={() => navigate(`/case-submission/${c.id}`)}>
                       <Eye className="w-4 h-4" />
