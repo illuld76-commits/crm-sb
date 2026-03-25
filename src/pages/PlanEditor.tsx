@@ -68,6 +68,8 @@ export default function PlanEditor() {
   const [planId, setPlanId] = useState<string | null>(isNew ? null : id || null);
   const [phaseId, setPhaseId] = useState<string | null>(phaseIdParam);
   const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [isEditing, setIsEditing] = useState(isNew);
+  const [planStatus, setPlanStatus] = useState<string>('draft');
 
   // Plan info
   const [planName, setPlanName] = useState('Treatment Plan');
@@ -120,6 +122,11 @@ export default function PlanEditor() {
     setPlanDate(plan.plan_date || '');
     setNotes(plan.notes || '');
     setPhaseId(plan.phase_id);
+    setPlanStatus(plan.status || 'draft');
+    // Open in read-only mode for saved/published plans
+    if (plan.status === 'published' || plan.status === 'saved') {
+      setIsEditing(false);
+    }
 
     const { data: sections } = await supabase.from('plan_sections').select('*').eq('plan_id', planId).order('sort_order');
     if (sections) {
@@ -706,12 +713,26 @@ export default function PlanEditor() {
             <span className="font-semibold text-sm">{isNew ? 'New Plan' : planName}</span>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={savePlan} disabled={saving}>
-              <Save className="w-3 h-3 mr-1" /> Save
-            </Button>
-            <Button size="sm" onClick={publishPlan} className="dental-gradient" disabled={saving || !planName}>
-              <Eye className="w-3 h-3 mr-1" /> Publish
-            </Button>
+            {!isEditing && !isNew && (
+              <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+                <Pencil className="w-3 h-3 mr-1" /> Edit
+              </Button>
+            )}
+            {isEditing && (
+              <>
+                {!isNew && (
+                  <Button variant="ghost" size="sm" onClick={() => { setIsEditing(false); if (id) loadPlan(id); }}>
+                    Cancel
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={savePlan} disabled={saving}>
+                  <Save className="w-3 h-3 mr-1" /> Save
+                </Button>
+                <Button size="sm" onClick={publishPlan} className="dental-gradient" disabled={saving || !planName}>
+                  <Eye className="w-3 h-3 mr-1" /> Publish
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </header>
