@@ -379,6 +379,12 @@ export default function CommunicationHub({ caseId, relatedType, relatedId }: Com
           </Button>
         </div>
       </div>
+
+      <FilePreviewModal
+        file={chatPreviewFile}
+        isOpen={!!chatPreviewFile}
+        onClose={() => setChatPreviewFile(null)}
+      />
     </div>
   );
 }
