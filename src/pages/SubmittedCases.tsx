@@ -61,6 +61,41 @@ export default function SubmittedCases() {
     }
   };
 
+  const softDelete = async (id: string) => {
+    const { error } = await supabase.from('case_requests').update({ is_deleted: true }).eq('id', id);
+    if (!error) {
+      setCases(prev => prev.filter(c => c.id !== id));
+      toast.success('Moved to archives');
+    } else {
+      toast.error('Failed to delete');
+    }
+  };
+
+  const convertToCase = async (c: CaseRequest) => {
+    if (c.patient_id) {
+      navigate(`/patient/${c.patient_id}`);
+      return;
+    }
+    const { data: newPatient, error } = await supabase.from('patients').insert({
+      patient_name: c.patient_name,
+      patient_age: c.patient_age,
+      patient_sex: c.patient_sex,
+      user_id: c.user_id,
+      clinic_name: c.clinic_name || null,
+      doctor_name: c.doctor_name || null,
+      lab_name: c.lab_name || null,
+    }).select('id').single();
+    if (!error && newPatient) {
+      await supabase.from('phases').insert({ patient_id: newPatient.id, phase_name: 'Initial Treatment', phase_order: 0 });
+      await supabase.from('case_requests').update({ patient_id: newPatient.id }).eq('id', c.id);
+      setCases(prev => prev.map(x => x.id === c.id ? { ...x, patient_id: newPatient.id } : x));
+      toast.success('Patient case created');
+      navigate(`/patient/${newPatient.id}`);
+    } else {
+      toast.error('Failed to create case');
+    }
+  };
+
   const exportCSV = () => {
     const headers = ['Name', 'Type', 'Status', 'Date'];
     const rows = filtered.map(c => [c.patient_name, c.request_type, c.status, format(new Date(c.created_at), 'yyyy-MM-dd')]);
