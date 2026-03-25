@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Search, Send, Lock, Paperclip, X, FileText, Image as ImageIcon, ExternalLink } from 'lucide-react';
+import { Search, Send, Lock, Paperclip, X, FileText, Image as ImageIcon, ExternalLink, Pin, SmilePlus, AtSign } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
