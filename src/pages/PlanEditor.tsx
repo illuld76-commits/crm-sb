@@ -800,7 +800,7 @@ export default function PlanEditor() {
                 </div>
                 <div className="space-y-2">
                   <Label>Notes</Label>
-                  <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Treatment plan notes..." rows={3} />
+                  <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Treatment plan notes..." rows={3} disabled={!isEditing} />
                 </div>
               </CardContent>
             </CollapsibleContent>
