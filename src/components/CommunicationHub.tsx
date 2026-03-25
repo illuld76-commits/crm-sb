@@ -48,8 +48,14 @@ export default function CommunicationHub({ caseId, relatedType, relatedId }: Com
   const [profiles, setProfiles] = useState<Record<string, string>>({});
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [showMentions, setShowMentions] = useState(false);
+  const [mentionSearch, setMentionSearch] = useState('');
+  const [mentionProfiles, setMentionProfiles] = useState<{ user_id: string; display_name: string | null }[]>([]);
+  const [reactions, setReactions] = useState<Record<string, { emoji: string; user_id: string }[]>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const REACTION_EMOJIS = ['👍', '✅', '❓', '🔄'];
 
   useEffect(() => {
     fetchMessages();
