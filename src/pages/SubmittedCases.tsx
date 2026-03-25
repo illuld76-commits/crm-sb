@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { Search, CheckCircle2, XCircle, Eye, Download, ArrowUpDown, Ban, Play, Pause, CircleCheck } from 'lucide-react';
+import { Search, CheckCircle2, XCircle, Eye, Download, ArrowUpDown, Ban, Play, Pause, CircleCheck, Trash2, UserPlus } from 'lucide-react';
 import { CaseRequest } from '@/types';
 
 type SortOption = 'date_desc' | 'date_asc' | 'name_az' | 'name_za';
@@ -58,6 +58,41 @@ export default function SubmittedCases() {
     if (!error) {
       setCases(prev => prev.map(c => c.id === id ? { ...c, status: newStatus } : c));
       toast.success(`Case ${newStatus.replace('_', ' ')}`);
+    }
+  };
+
+  const softDelete = async (id: string) => {
+    const { error } = await supabase.from('case_requests').update({ is_deleted: true }).eq('id', id);
+    if (!error) {
+      setCases(prev => prev.filter(c => c.id !== id));
+      toast.success('Moved to archives');
+    } else {
+      toast.error('Failed to delete');
+    }
+  };
+
+  const convertToCase = async (c: CaseRequest) => {
+    if (c.patient_id) {
+      navigate(`/patient/${c.patient_id}`);
+      return;
+    }
+    const { data: newPatient, error } = await supabase.from('patients').insert({
+      patient_name: c.patient_name,
+      patient_age: c.patient_age,
+      patient_sex: c.patient_sex,
+      user_id: c.user_id,
+      clinic_name: c.clinic_name || null,
+      doctor_name: c.doctor_name || null,
+      lab_name: c.lab_name || null,
+    }).select('id').single();
+    if (!error && newPatient) {
+      await supabase.from('phases').insert({ patient_id: newPatient.id, phase_name: 'Initial Treatment', phase_order: 0 });
+      await supabase.from('case_requests').update({ patient_id: newPatient.id }).eq('id', c.id);
+      setCases(prev => prev.map(x => x.id === c.id ? { ...x, patient_id: newPatient.id } : x));
+      toast.success('Patient case created');
+      navigate(`/patient/${newPatient.id}`);
+    } else {
+      toast.error('Failed to create case');
     }
   };
 
@@ -170,7 +205,20 @@ export default function SubmittedCases() {
                             <Ban className="w-3 h-3" />
                           </Button>
                         )}
+                        {!c.patient_id && ['accepted', 'in_progress', 'completed'].includes(c.status) && (
+                          <Button variant="ghost" size="sm" className="text-primary text-xs" onClick={() => convertToCase(c)} title="Convert to Case">
+                            <UserPlus className="w-3 h-3 mr-0.5" /> Case
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => softDelete(c.id)} title="Delete">
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
                       </>
+                    )}
+                    {c.patient_id && (
+                      <Button variant="ghost" size="sm" className="text-primary text-xs" onClick={() => navigate(`/patient/${c.patient_id}`)} title="View Case">
+                        <UserPlus className="w-3 h-3 mr-0.5" /> View
+                      </Button>
                     )}
                     <Button variant="ghost" size="sm" onClick={() => navigate(`/case-submission/${c.id}`)}>
                       <Eye className="w-4 h-4" />
