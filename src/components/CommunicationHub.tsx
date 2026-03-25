@@ -58,6 +58,7 @@ export default function CommunicationHub({ caseId, relatedType, relatedId }: Com
   const REACTION_EMOJIS = ['👍', '✅', '❓', '🔄'];
 
   useEffect(() => {
+    supabase.from('profiles').select('user_id, display_name').then(({ data }) => setMentionProfiles(data || []));
     fetchMessages();
     const channel = supabase
       .channel(`comms-${caseId}-${relatedType || 'all'}-${relatedId || 'all'}`)
