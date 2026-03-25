@@ -33,6 +33,7 @@ import Notifications from "./pages/Notifications";
 import NotFound from "./pages/NotFound";
 import WorkOrderDetail from "./pages/WorkOrderDetail";
 import Messages from "./pages/Messages";
+import GlobalAssets from "./pages/GlobalAssets";
 
 const queryClient = new QueryClient();
 
@@ -63,6 +64,7 @@ const App = () => (
                     <Route path="submitted-cases" element={<SubmittedCases />} />
                     <Route path="work-order/:id" element={<WorkOrderDetail />} />
                     <Route path="messages" element={<Messages />} />
+                    <Route path="assets" element={<GlobalAssets />} />
                     <Route path="archives" element={<ProtectedRoute requireAdmin><AdminArchives /></ProtectedRoute>} />
                     <Route path="profile" element={<Profile />} />
                     <Route path="billing" element={<BillingList />} />
