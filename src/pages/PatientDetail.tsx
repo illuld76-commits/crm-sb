@@ -30,6 +30,7 @@ import SnaponLogo from '@/components/SnaponLogo';
 import IPRQuadrantDiagram from '@/components/IPRQuadrantDiagram';
 import ToothMovementChart from '@/components/ToothMovementChart';
 import CommunicationHub from '@/components/CommunicationHub';
+import FilePreviewModal, { PreviewFile } from '@/components/FilePreviewModal';
 import { IPRData, ToothMovementData } from '@/lib/csv-parser';
 
 interface Phase {
@@ -169,6 +170,7 @@ export default function PatientDetail() {
 
   // Assets from assets table
   const [assets, setAssets] = useState<AssetRow[]>([]);
+  const [assetPreviewFile, setAssetPreviewFile] = useState<PreviewFile | null>(null);
 
   // All files across sections for Assets tab (plan_sections files)
   const allFiles = sections.filter(s => s.file_url).map(s => ({
@@ -259,7 +261,13 @@ export default function PatientDetail() {
     setInvoices(invData || []);
     setAssets(assetData || []);
     if (isAdmin) {
-      const { data: logData } = await supabase.from('audit_logs').select('id, action, target_name, user_name, details, created_at').eq('target_id', patientId).order('created_at', { ascending: false }).limit(50);
+      const phaseIds2 = (phaseData || []).map(ph => ph.id);
+      const planIds2 = plans.map(pl => pl.id);
+      const allTargetIds = [patientId, ...phaseIds2, ...planIds2];
+      const { data: logData } = await supabase.from('audit_logs')
+        .select('id, action, target_name, user_name, details, created_at')
+        .in('target_id', allTargetIds)
+        .order('created_at', { ascending: false }).limit(100);
       setAuditLogs(logData || []);
     }
 
@@ -903,7 +911,8 @@ export default function PatientDetail() {
                 {assets.filter(a => isAdmin || a.is_viewable).map(asset => (
                   <Card key={asset.id} className="p-3 space-y-2">
                     {asset.file_type.startsWith('image') ? (
-                      <img src={asset.file_url} alt={asset.original_name || ''} className="w-full rounded-lg object-cover h-40" />
+                      <img src={asset.file_url} alt={asset.original_name || ''} className="w-full rounded-lg object-cover h-40 cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => setAssetPreviewFile({ name: asset.original_name || asset.category, url: asset.file_url, type: asset.file_type, size: 0 })} />
                     ) : asset.file_type.startsWith('video') ? (
                       <video src={asset.file_url} controls className="w-full rounded-lg h-40 object-cover" />
                     ) : asset.file_type === 'application/pdf' ? (
@@ -1112,6 +1121,11 @@ export default function PatientDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <FilePreviewModal
+        file={assetPreviewFile}
+        isOpen={!!assetPreviewFile}
+        onClose={() => setAssetPreviewFile(null)}
+      />
     </div>
   );
 }

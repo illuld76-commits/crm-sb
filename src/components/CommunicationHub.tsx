@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Search, Send, Lock, Paperclip, X, FileText, Image as ImageIcon, ExternalLink, Pin, SmilePlus, AtSign } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import FilePreviewModal, { PreviewFile } from '@/components/FilePreviewModal';
 
 interface Attachment {
   name: string;
@@ -54,6 +55,7 @@ export default function CommunicationHub({ caseId, relatedType, relatedId }: Com
   const [reactions, setReactions] = useState<Record<string, { emoji: string; user_id: string }[]>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [chatPreviewFile, setChatPreviewFile] = useState<PreviewFile | null>(null);
 
   const REACTION_EMOJIS = ['👍', '✅', '❓', '🔄'];
 
@@ -225,31 +227,31 @@ export default function CommunicationHub({ caseId, relatedType, relatedId }: Com
     const isVideo = att.type.startsWith('video/');
     const isPdf = att.type === 'application/pdf';
 
+    const openPreview = () => setChatPreviewFile({ name: att.name, url: att.url, type: att.type, size: att.size });
+
     return (
       <div key={att.url} className="mt-1">
         {isImage && (
-          <a href={att.url} target="_blank" rel="noopener noreferrer">
-            <img src={att.url} alt={att.name} className="max-w-[200px] max-h-[150px] rounded object-cover" />
-          </a>
+          <img src={att.url} alt={att.name} className="max-w-[200px] max-h-[150px] rounded object-cover cursor-pointer hover:opacity-80 transition-opacity" onClick={openPreview} />
         )}
         {isVideo && (
-          <video src={att.url} controls className="max-w-[250px] max-h-[150px] rounded" />
+          <video src={att.url} controls className="max-w-[250px] max-h-[150px] rounded cursor-pointer" onClick={openPreview} />
         )}
         {isPdf && (
-          <a href={att.url} target="_blank" rel="noopener noreferrer"
+          <button onClick={openPreview}
             className="flex items-center gap-1.5 px-2 py-1 rounded bg-background/50 hover:bg-background text-xs border border-border/50 max-w-[200px]">
             <FileText className="w-3 h-3 shrink-0" />
             <span className="truncate">{att.name}</span>
             <ExternalLink className="w-3 h-3 shrink-0" />
-          </a>
+          </button>
         )}
         {!isImage && !isVideo && !isPdf && (
-          <a href={att.url} target="_blank" rel="noopener noreferrer"
+          <button onClick={openPreview}
             className="flex items-center gap-1.5 px-2 py-1 rounded bg-background/50 hover:bg-background text-xs border border-border/50 max-w-[200px]">
             <FileText className="w-3 h-3 shrink-0" />
             <span className="truncate">{att.name}</span>
             <ExternalLink className="w-3 h-3 shrink-0" />
-          </a>
+          </button>
         )}
       </div>
     );
@@ -377,6 +379,12 @@ export default function CommunicationHub({ caseId, relatedType, relatedId }: Com
           </Button>
         </div>
       </div>
+
+      <FilePreviewModal
+        file={chatPreviewFile}
+        isOpen={!!chatPreviewFile}
+        onClose={() => setChatPreviewFile(null)}
+      />
     </div>
   );
 }
