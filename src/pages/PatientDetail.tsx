@@ -22,8 +22,10 @@ import { format } from 'date-fns';
 import {
   ArrowLeft, Plus,
   Edit, Trash2, Copy, Share2, Save, FileText, MessageSquare, Users,
-  CreditCard, History, ImageIcon, Download, ExternalLink,
+  CreditCard, History, ImageIcon, Download, ExternalLink, Clock,
+  Briefcase, Receipt, Paperclip, CalendarDays,
 } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 import SnaponLogo from '@/components/SnaponLogo';
 import IPRQuadrantDiagram from '@/components/IPRQuadrantDiagram';
 import ToothMovementChart from '@/components/ToothMovementChart';
