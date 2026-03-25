@@ -292,6 +292,34 @@ export default function CaseSubmission() {
                         <Ban className="w-3.5 h-3.5 mr-1" /> Discard
                       </Button>
                     )}
+                    {!caseData.patient_id && ['accepted', 'in_progress', 'completed'].includes(caseData.status) && (
+                      <Button size="sm" variant="outline" className="text-primary" onClick={async () => {
+                        const { data: newPatient, error } = await supabase.from('patients').insert({
+                          patient_name: caseData.patient_name,
+                          patient_age: caseData.patient_age,
+                          patient_sex: caseData.patient_sex,
+                          user_id: caseData.user_id,
+                          clinic_name: caseData.clinic_name || null,
+                          doctor_name: caseData.doctor_name || null,
+                          lab_name: caseData.lab_name || null,
+                        }).select('id').single();
+                        if (!error && newPatient) {
+                          await supabase.from('phases').insert({ patient_id: newPatient.id, phase_name: 'Initial Treatment', phase_order: 0 });
+                          await supabase.from('case_requests').update({ patient_id: newPatient.id }).eq('id', id);
+                          toast.success('Patient case created');
+                          navigate(`/patient/${newPatient.id}`);
+                        } else { toast.error('Failed to create case'); }
+                      }}>
+                        <UserPlus className="w-3.5 h-3.5 mr-1" /> Convert to Case
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" className="text-destructive" onClick={async () => {
+                      const { error } = await supabase.from('case_requests').update({ is_deleted: true }).eq('id', id);
+                      if (!error) { toast.success('Moved to archives'); navigate('/submitted-cases'); }
+                      else toast.error('Failed to delete');
+                    }}>
+                      <Trash2 className="w-3.5 h-3.5 mr-1" /> Delete
+                    </Button>
                   </div>
                 )}
               </div>
