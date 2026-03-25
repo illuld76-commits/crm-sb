@@ -170,6 +170,7 @@ export default function PatientDetail() {
 
   // Assets from assets table
   const [assets, setAssets] = useState<AssetRow[]>([]);
+  const [assetPreviewFile, setAssetPreviewFile] = useState<PreviewFile | null>(null);
 
   // All files across sections for Assets tab (plan_sections files)
   const allFiles = sections.filter(s => s.file_url).map(s => ({
