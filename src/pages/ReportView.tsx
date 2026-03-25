@@ -309,6 +309,12 @@ export default function ReportView() {
           Generated with Snapon Braces • {format(new Date(), 'yyyy')}
         </div>
       </main>
+
+      <FilePreviewModal
+        file={previewFile}
+        isOpen={!!previewFile}
+        onClose={() => setPreviewFile(null)}
+      />
     </div>
   );
 }
