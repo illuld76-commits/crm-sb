@@ -30,17 +30,8 @@ import SnaponLogo from '@/components/SnaponLogo';
 import IPRQuadrantDiagram from '@/components/IPRQuadrantDiagram';
 import ToothMovementChart from '@/components/ToothMovementChart';
 import CommunicationHub from '@/components/CommunicationHub';
+import FilePreviewModal, { PreviewFile } from '@/components/FilePreviewModal';
 import { IPRData, ToothMovementData } from '@/lib/csv-parser';
-
-interface Phase {
-  id: string;
-  phase_name: string;
-  phase_order: number;
-  status: string;
-  created_at: string;
-}
-
-interface Plan {
   id: string;
   phase_id: string;
   plan_name: string;
