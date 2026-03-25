@@ -289,11 +289,40 @@ export default function CommunicationHub({ caseId, relatedType, relatedId }: Com
                       </Badge>
                     )}
                   </div>
-                  {msg.content && <p className="text-sm">{msg.content}</p>}
+                  {msg.content && (
+                    <p className="text-sm">
+                      {msg.content.split(/(@\w[\w\s]*?)(?=\s|$|@)/).map((part, i) =>
+                        part.startsWith('@') ? <span key={i} className="font-semibold text-blue-300">{part}</span> : part
+                      )}
+                    </p>
+                  )}
                   {msg.attachments && msg.attachments.length > 0 && (
                     <div className="space-y-1">{msg.attachments.map(renderAttachment)}</div>
                   )}
-                  <p className="text-[10px] opacity-60">{format(new Date(msg.created_at), 'MMM d, h:mm a')}</p>
+                  <div className="flex items-center justify-between mt-1">
+                    <p className="text-[10px] opacity-60">{format(new Date(msg.created_at), 'MMM d, h:mm a')}</p>
+                    <div className="flex items-center gap-0.5">
+                      {REACTION_EMOJIS.map(emoji => {
+                        const msgReactions = reactions[msg.id] || [];
+                        const count = msgReactions.filter(r => r.emoji === emoji).length;
+                        const hasReacted = msgReactions.some(r => r.emoji === emoji && r.user_id === user?.id);
+                        return (
+                          <button
+                            key={emoji}
+                            className={`text-[10px] px-1 py-0.5 rounded hover:bg-background/30 transition-colors ${hasReacted ? 'bg-background/20' : ''}`}
+                            onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); }}
+                          >
+                            {emoji}{count > 0 && <span className="ml-0.5">{count}</span>}
+                          </button>
+                        );
+                      })}
+                      {isAdmin && (
+                        <button className="text-[10px] px-1 py-0.5 rounded hover:bg-background/30 opacity-50 hover:opacity-100" onClick={() => togglePin(msg)}>
+                          <Pin className="w-2.5 h-2.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             );
