@@ -22,8 +22,10 @@ import { format } from 'date-fns';
 import {
   ArrowLeft, Plus,
   Edit, Trash2, Copy, Share2, Save, FileText, MessageSquare, Users,
-  CreditCard, History, ImageIcon, Download, ExternalLink,
+  CreditCard, History, ImageIcon, Download, ExternalLink, Clock,
+  Briefcase, Receipt, Paperclip, CalendarDays,
 } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 import SnaponLogo from '@/components/SnaponLogo';
 import IPRQuadrantDiagram from '@/components/IPRQuadrantDiagram';
 import ToothMovementChart from '@/components/ToothMovementChart';
@@ -532,8 +534,34 @@ export default function PatientDetail() {
 
       <main className="container mx-auto px-4 py-6 max-w-6xl">
         {/* 4-Tab Hub */}
+        {/* Quick Links Row */}
+        <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
+          <Badge variant="outline" className="cursor-pointer hover:bg-accent gap-1 shrink-0 py-1.5" onClick={() => setActiveTab('billing')}>
+            <Receipt className="w-3 h-3" /> {invoices.length} Invoice{invoices.length !== 1 ? 's' : ''}
+            {invoices.reduce((s, i) => s + (i.status !== 'paid' ? i.amount_usd : 0), 0) > 0 && (
+              <span className="text-destructive ml-1">₹{invoices.reduce((s, i) => s + (i.status !== 'paid' ? i.amount_usd : 0), 0).toLocaleString()}</span>
+            )}
+          </Badge>
+          <Badge variant="outline" className="cursor-pointer hover:bg-accent gap-1 shrink-0 py-1.5" onClick={() => setActiveTab('assets')}>
+            <Paperclip className="w-3 h-3" /> {assets.length + allFiles.length} Files
+          </Badge>
+          <Badge variant="outline" className="cursor-pointer hover:bg-accent gap-1 shrink-0 py-1.5" onClick={() => setActiveTab('timeline')}>
+            <Clock className="w-3 h-3" /> {auditLogs.length} Events
+          </Badge>
+          {remarks.length > 0 && (
+            <Badge variant="outline" className="gap-1 shrink-0 py-1.5">
+              <MessageSquare className="w-3 h-3" /> Last remark {formatDistanceToNow(new Date(remarks[0].created_at), { addSuffix: true })}
+            </Badge>
+          )}
+          {patient?.share_token && (
+            <Badge variant="outline" className="cursor-pointer hover:bg-accent gap-1 shrink-0 py-1.5" onClick={() => navigate(`/journey/${patient.share_token}`)}>
+              <ExternalLink className="w-3 h-3" /> Share Report
+            </Badge>
+          )}
+        </div>
+
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 mb-6">
+          <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 mb-6">
             <TabsTrigger value="workbench" className="gap-1.5 text-xs sm:text-sm">
               <FileText className="w-3 h-3 sm:w-4 sm:h-4" /> Workbench
             </TabsTrigger>
@@ -542,6 +570,9 @@ export default function PatientDetail() {
             </TabsTrigger>
             <TabsTrigger value="communication" className="gap-1.5 text-xs sm:text-sm">
               <MessageSquare className="w-3 h-3 sm:w-4 sm:h-4" /> Chat
+            </TabsTrigger>
+            <TabsTrigger value="timeline" className="gap-1.5 text-xs sm:text-sm">
+              <History className="w-3 h-3 sm:w-4 sm:h-4" /> Timeline
             </TabsTrigger>
             <TabsTrigger value="billing" className="gap-1.5 text-xs sm:text-sm">
               <CreditCard className="w-3 h-3 sm:w-4 sm:h-4" /> Billing
@@ -952,7 +983,55 @@ export default function PatientDetail() {
             </Card>
           </TabsContent>
 
-          {/* ===== TAB 4: BILLING & LOGS ===== */}
+          {/* ===== TAB 4: TIMELINE ===== */}
+          <TabsContent value="timeline" className="space-y-4">
+            <h2 className="text-lg font-bold flex items-center gap-2"><History className="w-5 h-5" /> Activity Timeline</h2>
+            {auditLogs.length === 0 ? (
+              <Card className="p-8 text-center">
+                <Clock className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
+                <p className="text-muted-foreground text-sm">No activity recorded for this case yet.</p>
+              </Card>
+            ) : (
+              <div className="relative">
+                <div className="absolute left-4 top-0 bottom-0 w-px bg-border" />
+                <div className="space-y-0">
+                  {auditLogs.map((log, i) => {
+                    const prevLog = auditLogs[i - 1];
+                    const thisDate = format(new Date(log.created_at), 'MMM d, yyyy');
+                    const prevDate = prevLog ? format(new Date(prevLog.created_at), 'MMM d, yyyy') : '';
+                    const showDateSep = thisDate !== prevDate;
+                    const iconColor = log.action.includes('Delete') || log.action.includes('Reject') ? 'bg-destructive' :
+                      log.action.includes('Accept') || log.action.includes('Complete') || log.action.includes('Paid') ? 'bg-green-500' :
+                      log.action.includes('Submit') || log.action.includes('Create') ? 'bg-blue-500' : 'bg-muted-foreground';
+                    return (
+                      <div key={log.id}>
+                        {showDateSep && (
+                          <div className="ml-10 py-2">
+                            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider bg-background px-2">{thisDate}</span>
+                          </div>
+                        )}
+                        <div className="flex items-start gap-3 py-2 pl-1">
+                          <div className={`w-3 h-3 rounded-full ${iconColor} shrink-0 mt-1 ring-2 ring-background z-10 ml-[6px]`} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-medium">{log.action}</span>
+                              <Badge variant="outline" className="text-[9px]">{log.target_name}</Badge>
+                            </div>
+                            {log.details && <p className="text-xs text-muted-foreground mt-0.5">{log.details}</p>}
+                            <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+                              {log.user_name} · {format(new Date(log.created_at), 'h:mm a')}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* ===== TAB 5: BILLING ===== */}
           <TabsContent value="billing" className="space-y-6">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-lg font-bold">Billing</h2>

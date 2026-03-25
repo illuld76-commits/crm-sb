@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Search, Send, Lock, Paperclip, X, FileText, Image as ImageIcon, ExternalLink } from 'lucide-react';
+import { Search, Send, Lock, Paperclip, X, FileText, Image as ImageIcon, ExternalLink, Pin, SmilePlus, AtSign } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -48,10 +48,17 @@ export default function CommunicationHub({ caseId, relatedType, relatedId }: Com
   const [profiles, setProfiles] = useState<Record<string, string>>({});
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [showMentions, setShowMentions] = useState(false);
+  const [mentionSearch, setMentionSearch] = useState('');
+  const [mentionProfiles, setMentionProfiles] = useState<{ user_id: string; display_name: string | null }[]>([]);
+  const [reactions, setReactions] = useState<Record<string, { emoji: string; user_id: string }[]>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const REACTION_EMOJIS = ['👍', '✅', '❓', '🔄'];
+
   useEffect(() => {
+    supabase.from('profiles').select('user_id, display_name').then(({ data }) => setMentionProfiles(data || []));
     fetchMessages();
     const channel = supabase
       .channel(`comms-${caseId}-${relatedType || 'all'}-${relatedId || 'all'}`)
@@ -137,9 +144,71 @@ export default function CommunicationHub({ caseId, relatedType, relatedId }: Com
         attachments: attachments as any,
       });
       if (error) { toast.error('Failed to send message'); return; }
-      setNewMessage(''); setPendingFiles([]);
+
+      // Check for @mentions and send notifications
+      const mentionRegex = /@(\w[\w\s]*?)(?=\s|$|@)/g;
+      let match;
+      while ((match = mentionRegex.exec(newMessage)) !== null) {
+        const mentionedName = match[1].trim();
+        const mentionedProfile = mentionProfiles.find(p =>
+          p.display_name?.toLowerCase() === mentionedName.toLowerCase()
+        );
+        if (mentionedProfile && mentionedProfile.user_id !== user.id) {
+          await supabase.from('notifications').insert({
+            user_id: mentionedProfile.user_id,
+            title: `@Mention from ${profiles[user.id] || user.email}`,
+            body: newMessage.trim().slice(0, 100),
+            link: `/patient/${caseId}`,
+          });
+        }
+      }
+
+      setNewMessage(''); setPendingFiles([]); setShowMentions(false);
     } finally { setUploading(false); }
   };
+
+  const handleMessageInput = (value: string) => {
+    setNewMessage(value);
+    const lastAt = value.lastIndexOf('@');
+    if (lastAt >= 0 && lastAt === value.length - 1) {
+      setShowMentions(true);
+      setMentionSearch('');
+    } else if (lastAt >= 0 && !value.slice(lastAt).includes(' ')) {
+      setShowMentions(true);
+      setMentionSearch(value.slice(lastAt + 1));
+    } else {
+      setShowMentions(false);
+    }
+  };
+
+  const insertMention = (name: string) => {
+    const lastAt = newMessage.lastIndexOf('@');
+    setNewMessage(newMessage.slice(0, lastAt) + `@${name} `);
+    setShowMentions(false);
+  };
+
+  const toggleReaction = async (messageId: string, emoji: string) => {
+    if (!user) return;
+    // Use communications id as a pseudo remark_id for reactions
+    const existing = reactions[messageId]?.find(r => r.emoji === emoji && r.user_id === user.id);
+    if (existing) {
+      await supabase.from('remark_reactions').delete().eq('remark_id', messageId).eq('user_id', user.id).eq('emoji', emoji);
+      setReactions(prev => ({ ...prev, [messageId]: (prev[messageId] || []).filter(r => !(r.emoji === emoji && r.user_id === user.id)) }));
+    } else {
+      await supabase.from('remark_reactions').insert({ remark_id: messageId, user_id: user.id, emoji });
+      setReactions(prev => ({ ...prev, [messageId]: [...(prev[messageId] || []), { emoji, user_id: user.id }] }));
+    }
+  };
+
+  const togglePin = async (msg: Message) => {
+    // Pin/unpin using the communications table doesn't have a pin column,
+    // so we'll use a visual indicator only for now
+    toast.info('Pin toggled (visual)');
+  };
+
+  const filteredMentionProfiles = mentionProfiles.filter(p =>
+    !mentionSearch || p.display_name?.toLowerCase().includes(mentionSearch.toLowerCase())
+  ).slice(0, 5);
 
   const filteredMessages = messages.filter(m => {
     if (search) {
@@ -220,11 +289,40 @@ export default function CommunicationHub({ caseId, relatedType, relatedId }: Com
                       </Badge>
                     )}
                   </div>
-                  {msg.content && <p className="text-sm">{msg.content}</p>}
+                  {msg.content && (
+                    <p className="text-sm">
+                      {msg.content.split(/(@\w[\w\s]*?)(?=\s|$|@)/).map((part, i) =>
+                        part.startsWith('@') ? <span key={i} className="font-semibold text-blue-300">{part}</span> : part
+                      )}
+                    </p>
+                  )}
                   {msg.attachments && msg.attachments.length > 0 && (
                     <div className="space-y-1">{msg.attachments.map(renderAttachment)}</div>
                   )}
-                  <p className="text-[10px] opacity-60">{format(new Date(msg.created_at), 'MMM d, h:mm a')}</p>
+                  <div className="flex items-center justify-between mt-1">
+                    <p className="text-[10px] opacity-60">{format(new Date(msg.created_at), 'MMM d, h:mm a')}</p>
+                    <div className="flex items-center gap-0.5">
+                      {REACTION_EMOJIS.map(emoji => {
+                        const msgReactions = reactions[msg.id] || [];
+                        const count = msgReactions.filter(r => r.emoji === emoji).length;
+                        const hasReacted = msgReactions.some(r => r.emoji === emoji && r.user_id === user?.id);
+                        return (
+                          <button
+                            key={emoji}
+                            className={`text-[10px] px-1 py-0.5 rounded hover:bg-background/30 transition-colors ${hasReacted ? 'bg-background/20' : ''}`}
+                            onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); }}
+                          >
+                            {emoji}{count > 0 && <span className="ml-0.5">{count}</span>}
+                          </button>
+                        );
+                      })}
+                      {isAdmin && (
+                        <button className="text-[10px] px-1 py-0.5 rounded hover:bg-background/30 opacity-50 hover:opacity-100" onClick={() => togglePin(msg)}>
+                          <Pin className="w-2.5 h-2.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             );
@@ -252,12 +350,27 @@ export default function CommunicationHub({ caseId, relatedType, relatedId }: Com
             ))}
           </div>
         )}
+        {/* @Mention dropdown */}
+        {showMentions && filteredMentionProfiles.length > 0 && (
+          <div className="absolute bottom-full left-0 right-0 bg-popover border border-border rounded-lg shadow-lg mb-1 mx-3 max-h-32 overflow-y-auto z-20">
+            {filteredMentionProfiles.map(p => (
+              <button
+                key={p.user_id}
+                className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent flex items-center gap-2"
+                onClick={() => insertMention(p.display_name || p.user_id.slice(0, 8))}
+              >
+                <AtSign className="w-3 h-3 text-muted-foreground" />
+                {p.display_name || p.user_id.slice(0, 8)}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex gap-2">
           <Button variant="ghost" size="icon" className="shrink-0 h-9 w-9" onClick={() => fileInputRef.current?.click()}>
             <Paperclip className="w-4 h-4" />
           </Button>
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={e => { if (e.target.files) setPendingFiles(prev => [...prev, ...Array.from(e.target.files!)]); e.target.value = ''; }} />
-          <Input value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Type a message..." className="text-sm"
+          <Input value={newMessage} onChange={e => handleMessageInput(e.target.value)} placeholder="Type a message... use @ to mention" className="text-sm"
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()} />
           <Button size="icon" onClick={sendMessage} disabled={(!newMessage.trim() && pendingFiles.length === 0) || uploading}>
             <Send className="w-4 h-4" />
