@@ -534,8 +534,34 @@ export default function PatientDetail() {
 
       <main className="container mx-auto px-4 py-6 max-w-6xl">
         {/* 4-Tab Hub */}
+        {/* Quick Links Row */}
+        <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
+          <Badge variant="outline" className="cursor-pointer hover:bg-accent gap-1 shrink-0 py-1.5" onClick={() => setActiveTab('billing')}>
+            <Receipt className="w-3 h-3" /> {invoices.length} Invoice{invoices.length !== 1 ? 's' : ''}
+            {invoices.reduce((s, i) => s + (i.status !== 'paid' ? i.amount_usd : 0), 0) > 0 && (
+              <span className="text-destructive ml-1">₹{invoices.reduce((s, i) => s + (i.status !== 'paid' ? i.amount_usd : 0), 0).toLocaleString()}</span>
+            )}
+          </Badge>
+          <Badge variant="outline" className="cursor-pointer hover:bg-accent gap-1 shrink-0 py-1.5" onClick={() => setActiveTab('assets')}>
+            <Paperclip className="w-3 h-3" /> {assets.length + allFiles.length} Files
+          </Badge>
+          <Badge variant="outline" className="cursor-pointer hover:bg-accent gap-1 shrink-0 py-1.5" onClick={() => setActiveTab('timeline')}>
+            <Clock className="w-3 h-3" /> {auditLogs.length} Events
+          </Badge>
+          {remarks.length > 0 && (
+            <Badge variant="outline" className="gap-1 shrink-0 py-1.5">
+              <MessageSquare className="w-3 h-3" /> Last remark {formatDistanceToNow(new Date(remarks[0].created_at), { addSuffix: true })}
+            </Badge>
+          )}
+          {patient?.share_token && (
+            <Badge variant="outline" className="cursor-pointer hover:bg-accent gap-1 shrink-0 py-1.5" onClick={() => navigate(`/journey/${patient.share_token}`)}>
+              <ExternalLink className="w-3 h-3" /> Share Report
+            </Badge>
+          )}
+        </div>
+
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 mb-6">
+          <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 mb-6">
             <TabsTrigger value="workbench" className="gap-1.5 text-xs sm:text-sm">
               <FileText className="w-3 h-3 sm:w-4 sm:h-4" /> Workbench
             </TabsTrigger>
@@ -544,6 +570,9 @@ export default function PatientDetail() {
             </TabsTrigger>
             <TabsTrigger value="communication" className="gap-1.5 text-xs sm:text-sm">
               <MessageSquare className="w-3 h-3 sm:w-4 sm:h-4" /> Chat
+            </TabsTrigger>
+            <TabsTrigger value="timeline" className="gap-1.5 text-xs sm:text-sm">
+              <History className="w-3 h-3 sm:w-4 sm:h-4" /> Timeline
             </TabsTrigger>
             <TabsTrigger value="billing" className="gap-1.5 text-xs sm:text-sm">
               <CreditCard className="w-3 h-3 sm:w-4 sm:h-4" /> Billing
