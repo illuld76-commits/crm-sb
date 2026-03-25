@@ -11,6 +11,7 @@ import ToothMovementChart from '@/components/ToothMovementChart';
 import { IPRData, ToothMovementData } from '@/lib/csv-parser';
 import ReportNav from '@/components/ReportNav';
 import SnaponLogo from '@/components/SnaponLogo';
+import FilePreviewModal, { PreviewFile } from '@/components/FilePreviewModal';
 
 interface PlanData { plan_name: string; plan_date: string | null; notes: string | null; }
 interface SectionData { section_type: string; data_json: any; caption: string | null; file_url: string | null; sort_order: number; }
@@ -23,6 +24,7 @@ export default function ReportView() {
   const [remarks, setRemarks] = useState<RemarkData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<PreviewFile | null>(null);
 
   useEffect(() => { if (token) loadReport(token); }, [token]);
 
@@ -245,7 +247,14 @@ export default function ReportView() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {imageSections.map((section, idx) => (
                     <div key={idx} className="space-y-2">
-                      {section.file_url && <img src={section.file_url} alt={section.caption || 'Illustration'} className="w-full rounded-lg object-cover" />}
+                      {section.file_url && (
+                        <img
+                          src={section.file_url}
+                          alt={section.caption || 'Illustration'}
+                          className="w-full rounded-lg object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                          onClick={() => setPreviewFile({ name: section.caption || `Image ${idx + 1}`, url: section.file_url!, type: 'image/jpeg', size: 0 })}
+                        />
+                      )}
                       {section.caption && <p className="text-sm text-muted-foreground">{section.caption}</p>}
                     </div>
                   ))}
