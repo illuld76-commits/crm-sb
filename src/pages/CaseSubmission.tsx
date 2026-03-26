@@ -201,6 +201,25 @@ export default function CaseSubmission() {
     if (!error) {
       setCaseData(prev => prev ? { ...prev, status: newStatus, patient_id: patientIdToLink || undefined, history: [...currentHistory, historyEntry] } : prev);
       toast.success(`Case ${newStatus.replace('_', ' ')}`);
+
+      // Log action
+      await logAction({
+        action: `Case ${newStatus.replace('_', ' ')}`, target_type: 'case_request',
+        target_id: id, target_name: caseData?.patient_name || '',
+        user_id: user.id, user_name: user.email || '',
+        details: `Case request status changed to ${newStatus}`,
+        old_value: caseData?.status, new_value: newStatus,
+      });
+
+      // Send notification to case owner
+      if (caseData?.user_id && caseData.user_id !== user.id) {
+        await sendNotification({
+          userId: caseData.user_id,
+          eventType: `case_${newStatus}`,
+          placeholders: { patient_name: caseData.patient_name, case_status: newStatus },
+          link: `/case-submission/${id}`,
+        });
+      }
     }
   };
 
