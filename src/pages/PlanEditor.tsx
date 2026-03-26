@@ -216,9 +216,22 @@ export default function PlanEditor() {
     if (!planId) return;
     const { data, error } = await supabase.from('treatment_plans').update({ status: 'published' }).eq('id', planId).select('share_token').single();
     if (error) { toast.error('Failed to publish'); } else {
+      setPlanStatus('published');
       const url = `${window.location.origin}/report/${data.share_token}`;
       navigator.clipboard.writeText(url);
       toast.success('Published! Share link copied.');
+      await logAction({ action: 'Publish Plan', target_type: 'plan', target_id: planId, target_name: planName, user_id: user?.id || '', user_name: user?.email || '', details: 'Plan published and share link generated' });
+    }
+  };
+
+  const unpublishPlan = async () => {
+    if (!planId) return;
+    const { error } = await supabase.from('treatment_plans').update({ status: 'saved' }).eq('id', planId);
+    if (error) { toast.error('Failed to unpublish'); } else {
+      setPlanStatus('saved');
+      setIsEditing(true);
+      toast.success('Plan unpublished. It is now editable.');
+      await logAction({ action: 'Unpublish Plan', target_type: 'plan', target_id: planId, target_name: planName, user_id: user?.id || '', user_name: user?.email || '', details: 'Plan unpublished and reverted to saved state' });
     }
   };
 
