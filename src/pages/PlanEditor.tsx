@@ -1299,6 +1299,13 @@ export default function PlanEditor() {
           <Button size="sm" onClick={publishPlan} className="dental-gradient" disabled={saving || !planName}>
             <Eye className="w-3 h-3 mr-1" /> Publish
           </Button>
+          {isAdmin && planStatus === 'published' && (
+            <Button variant="outline" size="sm" className="text-orange-600 border-orange-300" onClick={() => {
+              if (confirm('Unpublish this plan? The public share link will stop working.')) unpublishPlan();
+            }}>
+              <Undo2 className="w-3 h-3 mr-1" /> Unpublish
+            </Button>
+          )}
         </div>
       </div>
     </div>
