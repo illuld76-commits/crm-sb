@@ -6,10 +6,11 @@ import Header from '@/components/Header';
 import CommunicationHub from '@/components/CommunicationHub';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useRelationalNav } from '@/hooks/useRelationalNav';
 import { formatDistanceToNow } from 'date-fns';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Search } from 'lucide-react';
 
 interface ConversationItem {
   case_id: string;
