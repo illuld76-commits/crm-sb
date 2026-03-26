@@ -13,11 +13,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { FileUp, X, Loader2, ArrowLeft, FileText, Image, Film, Music, Box, CheckCircle2, XCircle, Play, Pause, CircleCheck, Ban, ExternalLink, Download, UserPlus, Trash2 } from 'lucide-react';
+import { FileUp, X, Loader2, ArrowLeft, FileText, Image, Film, Music, Box, CheckCircle2, XCircle, Play, Pause, CircleCheck, Ban, ExternalLink, Download, UserPlus, Trash2, Plus, Hash } from 'lucide-react';
 import { logAction } from '@/lib/audit';
 import { sendNotification } from '@/lib/notifications';
 import { FileAttachment, Preset, CaseRequest } from '@/types';
 import FilePreviewModal from '@/components/FilePreviewModal';
+import ToothChartSelector, { ToothSelection } from '@/components/ToothChartSelector';
 import { format, formatDistanceToNow } from 'date-fns';
 
 export default function CaseSubmission() {
@@ -37,6 +38,11 @@ export default function CaseSubmission() {
   const [existingAttachments, setExistingAttachments] = useState<FileAttachment[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [previewFile, setPreviewFile] = useState<{ name: string; url: string; type: string; size: number } | null>(null);
+
+  // Multi-request type support
+  const [selectedRequestTypes, setSelectedRequestTypes] = useState<{ presetId: string; name: string; qty: number; fee: number }[]>([]);
+  const [dynamicFormData, setDynamicFormData] = useState<Record<string, any>>({});
+  const [toothChartData, setToothChartData] = useState<ToothSelection[]>([]);
 
   // Existing patient search for linking
   const [patientSearch, setPatientSearch] = useState('');
@@ -481,9 +487,26 @@ export default function CaseSubmission() {
               </div>
               <div className="space-y-2">
                 <Label>Request Type *</Label>
-                <Select value={formData.request_type} onValueChange={v => setFormData(p => ({ ...p, request_type: v }))}>
+                <Select value={formData.request_type} onValueChange={v => {
+                  setFormData(p => ({ ...p, request_type: v }));
+                  // Load linked work order form fields
+                  const reqType = presets.find(p => p.category === 'request_type' && p.name === v);
+                  if (reqType && reqType.unit) {
+                    // unit stores linked work order ID
+                    const wo = presets.find(p => p.id === reqType.unit);
+                    if (wo?.fields) {
+                      // Pre-populate dynamic form keys
+                      const keys: Record<string, any> = {};
+                      (wo.fields as any[]).forEach((f: any) => { keys[f.label] = ''; });
+                      setDynamicFormData(keys);
+                    }
+                  }
+                }}>
                   <SelectTrigger><SelectValue placeholder="Select type..." /></SelectTrigger>
                   <SelectContent>
+                    {presets.filter(p => p.category === 'request_type').map(p => (
+                      <SelectItem key={p.id} value={p.name}>{p.name}{p.fee_usd ? ` ($${p.fee_usd})` : ''}</SelectItem>
+                    ))}
                     {presets.filter(p => p.category === 'work_order').map(p => (
                       <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
                     ))}
@@ -545,6 +568,87 @@ export default function CaseSubmission() {
               <Label>Notes</Label>
               <Textarea value={formData.notes} onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))} rows={4} placeholder="Treatment notes, special instructions..." />
             </div>
+
+            {/* Dynamic Work Order Form Fields */}
+            {(() => {
+              const reqType = presets.find(p => p.category === 'request_type' && p.name === formData.request_type);
+              const linkedWoId = reqType?.unit;
+              const wo = linkedWoId ? presets.find(p => p.id === linkedWoId) : presets.find(p => p.category === 'work_order' && p.name === formData.request_type);
+              if (!wo?.fields || (wo.fields as any[]).length === 0) return null;
+              return (
+                <Card className="border-primary/20 bg-primary/5">
+                  <CardContent className="p-4 space-y-3">
+                    <h4 className="text-sm font-semibold">📋 {wo.name} — Work Order Form</h4>
+                    {(wo.fields as any[]).map((field: any) => {
+                      if (field.type === 'tooth_chart') {
+                        return (
+                          <div key={field.id} className="space-y-1">
+                            <Label className="text-xs">{field.label || 'Tooth Selection'}</Label>
+                            <ToothChartSelector value={toothChartData} onChange={setToothChartData} />
+                          </div>
+                        );
+                      }
+                      if (field.type === 'radio' && field.options) {
+                        return (
+                          <div key={field.id} className="space-y-1">
+                            <Label className="text-xs">{field.label}{field.required && ' *'}</Label>
+                            <Select value={dynamicFormData[field.label] || ''} onValueChange={v => setDynamicFormData(prev => ({ ...prev, [field.label]: v }))}>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select..." /></SelectTrigger>
+                              <SelectContent>{field.options.map((o: string) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                            </Select>
+                          </div>
+                        );
+                      }
+                      if (field.type === 'dropdown' && field.options) {
+                        return (
+                          <div key={field.id} className="space-y-1">
+                            <Label className="text-xs">{field.label}{field.required && ' *'}</Label>
+                            <Select value={dynamicFormData[field.label] || ''} onValueChange={v => setDynamicFormData(prev => ({ ...prev, [field.label]: v }))}>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select..." /></SelectTrigger>
+                              <SelectContent>{field.options.map((o: string) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                            </Select>
+                          </div>
+                        );
+                      }
+                      if (field.type === 'checkbox' && field.options) {
+                        return (
+                          <div key={field.id} className="space-y-1">
+                            <Label className="text-xs">{field.label}</Label>
+                            <div className="flex flex-wrap gap-2">
+                              {field.options.map((o: string) => (
+                                <label key={o} className="flex items-center gap-1 text-xs">
+                                  <input type="checkbox" checked={dynamicFormData[field.label]?.includes(o)} onChange={e => {
+                                    setDynamicFormData(prev => {
+                                      const current = prev[field.label] || [];
+                                      return { ...prev, [field.label]: e.target.checked ? [...current, o] : current.filter((x: string) => x !== o) };
+                                    });
+                                  }} />
+                                  {o}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      }
+                      if (field.type === 'textarea') {
+                        return (
+                          <div key={field.id} className="space-y-1">
+                            <Label className="text-xs">{field.label}{field.required && ' *'}</Label>
+                            <Textarea className="text-xs" rows={3} value={dynamicFormData[field.label] || ''} onChange={e => setDynamicFormData(prev => ({ ...prev, [field.label]: e.target.value }))} />
+                          </div>
+                        );
+                      }
+                      return (
+                        <div key={field.id} className="space-y-1">
+                          <Label className="text-xs">{field.label}{field.required && ' *'}</Label>
+                          <Input className="h-8 text-xs" value={dynamicFormData[field.label] || ''} onChange={e => setDynamicFormData(prev => ({ ...prev, [field.label]: e.target.value }))} />
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              );
+            })()}
 
             {/* File Upload */}
             <div className="space-y-2">
