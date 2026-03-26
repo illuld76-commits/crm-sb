@@ -276,8 +276,9 @@ export default function PresetForms() {
       <Header title="Preset Forms" />
       <main className="container mx-auto px-4 py-6 max-w-5xl">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid grid-cols-6 mb-6">
+          <TabsList className="flex flex-wrap h-auto gap-1 mb-6">
             <TabsTrigger value="work_order" className="text-xs">Work Orders</TabsTrigger>
+            <TabsTrigger value="plan_preset" className="text-xs">Plan Presets</TabsTrigger>
             <TabsTrigger value="fee" className="text-xs">Fees</TabsTrigger>
             <TabsTrigger value="item" className="text-xs">Items</TabsTrigger>
             <TabsTrigger value="discount" className="text-xs">Discounts</TabsTrigger>
@@ -356,6 +357,48 @@ export default function PresetForms() {
                   ))}
                 </div>
                 <Button onClick={addPreset} size="sm" className="gap-1"><Plus className="w-3 h-3" /> Add Preset</Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Plan Presets */}
+          <TabsContent value="plan_preset">
+            <Card>
+              <CardHeader><CardTitle className="text-base">Plan Presets</CardTitle>
+                <p className="text-xs text-muted-foreground">Create plan templates (aligner, orthodontic, etc.) that auto-apply when a work order type is selected.</p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1"><Label className="text-xs">Plan Preset Name *</Label><Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Standard Aligner Plan" /></div>
+                  <div className="space-y-1"><Label className="text-xs">Linked Work Order Type</Label><Input value={newDescription} onChange={e => setNewDescription(e.target.value)} placeholder="e.g. Standard Aligner" /></div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold">Default Plan Sections</Label>
+                    <Button size="sm" variant="outline" onClick={() => addField({ label: '', type: 'text', required: false })}><Plus className="w-3 h-3 mr-1" /> Section</Button>
+                  </div>
+                  {newFields.map((field, idx) => (
+                    <div key={field.id} className="flex items-start gap-2 p-2 rounded border border-border/50 bg-muted/20">
+                      <GripVertical className="w-4 h-4 text-muted-foreground mt-2 shrink-0" />
+                      <div className="flex-1 grid grid-cols-2 gap-2">
+                        <Input value={field.label} onChange={e => updateField(idx, { label: e.target.value })} placeholder="Section name" className="h-8 text-xs" />
+                        <Select value={field.type} onValueChange={v => updateField(idx, { type: v as any })}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="text">Text Notes</SelectItem>
+                            <SelectItem value="textarea">Detailed Notes</SelectItem>
+                            <SelectItem value="radio">Image Section</SelectItem>
+                            <SelectItem value="checkbox">File Upload</SelectItem>
+                            <SelectItem value="dropdown">IPR Data</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => removeField(idx)}><Trash2 className="w-3 h-3" /></Button>
+                    </div>
+                  ))}
+                </div>
+                <Button onClick={addPreset} size="sm" className="gap-1"><Plus className="w-3 h-3" /> Add Plan Preset</Button>
               </CardContent>
             </Card>
           </TabsContent>
