@@ -121,7 +121,7 @@ export default function CaseSubmission() {
         }
       }
 
-      const payload = {
+      const payload: any = {
         patient_name: formData.patient_name,
         patient_age: formData.patient_age ? parseInt(formData.patient_age) : null,
         patient_sex: formData.patient_sex,
@@ -135,6 +135,10 @@ export default function CaseSubmission() {
         doctor_name: formData.doctor_name,
         lab_name: formData.lab_name,
         patient_id: selectedPatientId,
+        dynamic_data: {
+          ...dynamicFormData,
+          ...(toothChartData.length > 0 ? { tooth_chart: toothChartData } : {}),
+        } as any,
       };
 
       if (id) {

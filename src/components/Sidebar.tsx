@@ -86,7 +86,7 @@ export default function Sidebar({ patients, phases, plans, caseRequests, onClose
         <div className="space-y-1">
           {[
             { to: '/', icon: LayoutGrid, label: 'Dashboard', show: true },
-            { to: '/kanban', icon: Columns3, label: 'Kanban Board', show: isAdmin },
+            { to: '/kanban', icon: Columns3, label: 'Kanban Board', show: true },
             { to: '/case-submission', icon: FilePlus, label: 'New Case Request', show: true },
             { to: '/messages', icon: MessageSquare, label: 'Messages', show: true },
             { to: '/notifications', icon: Bell, label: 'Notifications', show: true },
