@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
@@ -10,6 +10,14 @@ interface AudioRecorderProps {
   onRecorded: (blob: Blob, transcription: string) => void;
 }
 
+// Extend Window for webkitSpeechRecognition
+declare global {
+  interface Window {
+    webkitSpeechRecognition: any;
+    SpeechRecognition: any;
+  }
+}
+
 export default function AudioRecorder({ onRecorded }: AudioRecorderProps) {
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
@@ -17,8 +25,44 @@ export default function AudioRecorder({ onRecorded }: AudioRecorderProps) {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [transcription, setTranscription] = useState('');
   const [showApproval, setShowApproval] = useState(false);
+  const [liveTranscript, setLiveTranscript] = useState('');
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const recognitionRef = useRef<any>(null);
+
+  // Use Web Speech API for real-time transcription
+  const startSpeechRecognition = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+    
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    
+    let finalTranscript = '';
+    
+    recognition.onresult = (event: any) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript + ' ';
+        } else {
+          interim += event.results[i][0].transcript;
+        }
+      }
+      setLiveTranscript(finalTranscript + interim);
+    };
+    
+    recognition.onerror = () => { /* continue with server-side fallback */ };
+    recognitionRef.current = recognition;
+    
+    try { recognition.start(); } catch { /* ignore */ }
+  };
+
+  const stopSpeechRecognition = () => {
+    try { recognitionRef.current?.stop(); } catch { /* ignore */ }
+  };
 
   const startRecording = async () => {
     try {
@@ -26,6 +70,7 @@ export default function AudioRecorder({ onRecorded }: AudioRecorderProps) {
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
+      setLiveTranscript('');
 
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
@@ -33,13 +78,22 @@ export default function AudioRecorder({ onRecorded }: AudioRecorderProps) {
 
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach(t => t.stop());
+        stopSpeechRecognition();
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
         setAudioBlob(blob);
         setAudioUrl(URL.createObjectURL(blob));
-        await transcribeAudio(blob);
+        
+        // If Web Speech API got a transcript, use it; otherwise try server
+        if (liveTranscript.trim()) {
+          setTranscription(liveTranscript.trim());
+          setShowApproval(true);
+        } else {
+          await transcribeAudio(blob);
+        }
       };
 
       mediaRecorder.start();
+      startSpeechRecognition();
       setRecording(true);
     } catch (err) {
       toast.error('Microphone access denied');
@@ -54,7 +108,6 @@ export default function AudioRecorder({ onRecorded }: AudioRecorderProps) {
   const transcribeAudio = async (blob: Blob) => {
     setTranscribing(true);
     try {
-      // Convert blob to base64
       const buffer = await blob.arrayBuffer();
       const base64 = btoa(
         new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
@@ -65,7 +118,6 @@ export default function AudioRecorder({ onRecorded }: AudioRecorderProps) {
       });
 
       if (error) throw error;
-
       setTranscription(data.transcription || '');
       setShowApproval(true);
     } catch (err) {
@@ -90,12 +142,14 @@ export default function AudioRecorder({ onRecorded }: AudioRecorderProps) {
     setAudioUrl(null);
     setTranscription('');
     setShowApproval(false);
+    setLiveTranscript('');
   };
 
   if (showApproval) {
     return (
       <Card className="p-4 space-y-4 border-primary/30">
         <p className="text-sm font-medium">Review AI Transcription</p>
+        <p className="text-[10px] text-muted-foreground">Edit the text below if needed before approving.</p>
         {audioUrl && <audio src={audioUrl} controls className="w-full" />}
         <Textarea
           value={transcription}
@@ -133,6 +187,9 @@ export default function AudioRecorder({ onRecorded }: AudioRecorderProps) {
             <div className="w-4 h-4 rounded-full bg-destructive" />
           </div>
           <p className="text-sm text-muted-foreground">Recording...</p>
+          {liveTranscript && (
+            <p className="text-xs text-muted-foreground italic text-center max-w-sm">{liveTranscript}</p>
+          )}
           <Button variant="destructive" size="sm" onClick={stopRecording}>
             <Square className="w-3 h-3 mr-1" /> Stop Recording
           </Button>
@@ -143,7 +200,7 @@ export default function AudioRecorder({ onRecorded }: AudioRecorderProps) {
             <Mic className="w-6 h-6" />
           </Button>
           <p className="text-sm text-muted-foreground">Click to record audio notes</p>
-          <p className="text-xs text-muted-foreground">AI will transcribe and format into orthodontic terminology</p>
+          <p className="text-xs text-muted-foreground">Real-time speech-to-text with AI formatting</p>
         </>
       )}
     </div>

@@ -4,6 +4,7 @@ import Header from '@/components/Header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { RotateCcw, Trash2 } from 'lucide-react';
@@ -28,6 +29,8 @@ export default function AdminArchives() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ArchiveItem | null>(null);
   const [confirmText, setConfirmText] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState<'restore' | 'delete' | null>(null);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -61,6 +64,12 @@ export default function AdminArchives() {
     const { data: assets } = await supabase.from('assets').select('id, original_name, category, created_at').eq('is_deleted', true);
     (assets || []).forEach(a => results.push({ id: a.id, name: a.original_name || 'Unnamed', detail: a.category, archived_at: a.created_at, type: 'asset' }));
 
+    // Deleted communications
+    try {
+      const { data: comms } = await supabase.from('communications').select('id, content, created_at').eq('is_deleted', true);
+      (comms || []).forEach(c => results.push({ id: c.id, name: (c.content || '').slice(0, 50) || 'Message', detail: 'Communication', archived_at: c.created_at, type: 'communication' }));
+    } catch { /* column may not exist yet */ }
+
     setItems(results);
     setLoading(false);
   };
@@ -91,6 +100,9 @@ export default function AdminArchives() {
       case 'asset':
         ({ error } = await supabase.from('assets').update({ is_deleted: false }).eq('id', item.id));
         break;
+      case 'communication':
+        try { ({ error } = await supabase.from('communications').update({ is_deleted: false }).eq('id', item.id)); } catch { error = null; }
+        break;
     }
     if (!error) {
       setItems(prev => prev.filter(i => i.id !== item.id));
@@ -111,6 +123,7 @@ export default function AdminArchives() {
       case 'entity': ({ error } = await supabase.from('settings_entities').delete().eq('id', deleteTarget.id)); break;
       case 'invoice': ({ error } = await supabase.from('invoices').delete().eq('id', deleteTarget.id)); break;
       case 'asset': ({ error } = await supabase.from('assets').delete().eq('id', deleteTarget.id)); break;
+      case 'communication': try { ({ error } = await supabase.from('communications').delete().eq('id', deleteTarget.id)); } catch { error = null; } break;
     }
     if (!error) {
       setItems(prev => prev.filter(i => i.id !== deleteTarget.id));
@@ -121,30 +134,109 @@ export default function AdminArchives() {
     setDeleteDialogOpen(false);
   };
 
-  const typeLabel: Record<string, string> = {
-    case: 'Cases', plan: 'Plans', phase: 'Phases', case_request: 'Case Requests',
-    entity: 'Entities', invoice: 'Invoices', asset: 'Assets',
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
   };
 
-  const tabs = ['cases', 'plans', 'phases', 'case_requests', 'entities', 'invoices', 'assets'];
+  const selectAllInTab = (type: string) => {
+    const tabItems = items.filter(i => i.type === type);
+    const allSelected = tabItems.every(i => selectedIds.has(i.id));
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      tabItems.forEach(i => allSelected ? next.delete(i.id) : next.add(i.id));
+      return next;
+    });
+  };
+
+  const handleBulkAction = async (action: 'restore' | 'delete') => {
+    const selected = items.filter(i => selectedIds.has(i.id));
+    let successCount = 0;
+    for (const item of selected) {
+      if (action === 'restore') {
+        await restore(item);
+        successCount++;
+      } else {
+        setDeleteTarget(item);
+        // For bulk delete we skip confirm dialog and just delete
+        let error;
+        switch (item.type) {
+          case 'case': ({ error } = await supabase.from('patients').delete().eq('id', item.id)); break;
+          case 'plan': ({ error } = await supabase.from('treatment_plans').delete().eq('id', item.id)); break;
+          case 'phase': ({ error } = await supabase.from('phases').delete().eq('id', item.id)); break;
+          case 'case_request': ({ error } = await supabase.from('case_requests').delete().eq('id', item.id)); break;
+          case 'entity': ({ error } = await supabase.from('settings_entities').delete().eq('id', item.id)); break;
+          case 'invoice': ({ error } = await supabase.from('invoices').delete().eq('id', item.id)); break;
+          case 'asset': ({ error } = await supabase.from('assets').delete().eq('id', item.id)); break;
+          case 'communication': try { ({ error } = await supabase.from('communications').delete().eq('id', item.id)); } catch { error = null; } break;
+        }
+        if (!error) successCount++;
+      }
+    }
+    if (action === 'delete') {
+      setItems(prev => prev.filter(i => !selectedIds.has(i.id)));
+    }
+    setSelectedIds(new Set());
+    toast.success(`${action === 'restore' ? 'Restored' : 'Deleted'} ${successCount} items`);
+  };
+
+  const typeLabel: Record<string, string> = {
+    case: 'Cases', plan: 'Plans', phase: 'Phases', case_request: 'Case Requests',
+    entity: 'Entities', invoice: 'Invoices', asset: 'Assets', communication: 'Messages',
+  };
+
+  const tabs = ['cases', 'plans', 'phases', 'case_requests', 'entities', 'invoices', 'assets', 'communications'];
   const tabTypeMap: Record<string, string> = {
     cases: 'case', plans: 'plan', phases: 'phase', case_requests: 'case_request',
-    entities: 'entity', invoices: 'invoice', assets: 'asset',
+    entities: 'entity', invoices: 'invoice', assets: 'asset', communications: 'communication',
   };
 
   const renderItems = (type: string) => {
     const filtered = items.filter(i => i.type === type);
     if (filtered.length === 0) return <p className="text-muted-foreground text-center py-10">No archived {typeLabel[type]?.toLowerCase()}</p>;
+    
+    const tabSelectedCount = filtered.filter(i => selectedIds.has(i.id)).length;
+    
     return (
       <div className="space-y-3">
+        {/* Bulk actions */}
+        <div className="flex items-center justify-between">
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+            <Checkbox 
+              checked={tabSelectedCount === filtered.length && filtered.length > 0} 
+              onCheckedChange={() => selectAllInTab(type)} 
+            />
+            Select All ({filtered.length})
+          </label>
+          {tabSelectedCount > 0 && (
+            <div className="flex gap-1">
+              <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => handleBulkAction('restore')}>
+                <RotateCcw className="w-3 h-3 mr-1" /> Restore ({tabSelectedCount})
+              </Button>
+              <Button variant="outline" size="sm" className="text-xs h-7 text-destructive" onClick={() => {
+                if (confirm(`Permanently delete ${tabSelectedCount} items? This cannot be undone.`)) {
+                  handleBulkAction('delete');
+                }
+              }}>
+                <Trash2 className="w-3 h-3 mr-1" /> Delete ({tabSelectedCount})
+              </Button>
+            </div>
+          )}
+        </div>
         {filtered.map(item => (
           <Card key={item.id}>
             <CardContent className="p-4 flex items-center justify-between">
-              <div>
-                <span className="font-medium text-sm">{item.name}</span>
-                <div className="text-xs text-muted-foreground">
-                  {item.detail && <span>{item.detail} • </span>}
-                  Archived {format(new Date(item.archived_at), 'MMM d, yyyy')}
+              <div className="flex items-center gap-3">
+                <Checkbox checked={selectedIds.has(item.id)} onCheckedChange={() => toggleSelect(item.id)} />
+                <div>
+                  <span className="font-medium text-sm">{item.name}</span>
+                  <div className="text-xs text-muted-foreground">
+                    {item.detail && <span>{item.detail} • </span>}
+                    Archived {format(new Date(item.archived_at), 'MMM d, yyyy')}
+                  </div>
                 </div>
               </div>
               <div className="flex gap-1">
@@ -164,7 +256,7 @@ export default function AdminArchives() {
       <main className="container mx-auto px-4 py-6">
         <h1 className="text-xl font-bold mb-4">Archived & Deleted Items</h1>
         {loading ? <p className="text-muted-foreground text-center py-10">Loading...</p> : (
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <Tabs value={activeTab} onValueChange={v => { setActiveTab(v); setSelectedIds(new Set()); }}>
             <TabsList className="flex flex-wrap h-auto gap-1 mb-4">
               {tabs.map(tab => (
                 <TabsTrigger key={tab} value={tab} className="text-xs">
