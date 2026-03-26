@@ -64,11 +64,8 @@ export default function AdminArchives() {
     const { data: assets } = await supabase.from('assets').select('id, original_name, category, created_at').eq('is_deleted', true);
     (assets || []).forEach(a => results.push({ id: a.id, name: a.original_name || 'Unnamed', detail: a.category, archived_at: a.created_at, type: 'asset' }));
 
-    // Deleted communications
-    try {
-      const { data: comms } = await supabase.from('communications').select('id, content, created_at').eq('is_deleted', true);
-      (comms || []).forEach(c => results.push({ id: c.id, name: (c.content || '').slice(0, 50) || 'Message', detail: 'Communication', archived_at: c.created_at, type: 'communication' }));
-    } catch { /* column may not exist yet */ }
+    // Deleted communications - skip if column doesn't exist
+    // Communications don't have is_deleted column currently
 
     setItems(results);
     setLoading(false);
@@ -101,7 +98,7 @@ export default function AdminArchives() {
         ({ error } = await supabase.from('assets').update({ is_deleted: false }).eq('id', item.id));
         break;
       case 'communication':
-        try { ({ error } = await supabase.from('communications').update({ is_deleted: false }).eq('id', item.id)); } catch { error = null; }
+        // Communications don't have soft-delete currently
         break;
     }
     if (!error) {
@@ -123,7 +120,7 @@ export default function AdminArchives() {
       case 'entity': ({ error } = await supabase.from('settings_entities').delete().eq('id', deleteTarget.id)); break;
       case 'invoice': ({ error } = await supabase.from('invoices').delete().eq('id', deleteTarget.id)); break;
       case 'asset': ({ error } = await supabase.from('assets').delete().eq('id', deleteTarget.id)); break;
-      case 'communication': try { ({ error } = await supabase.from('communications').delete().eq('id', deleteTarget.id)); } catch { error = null; } break;
+      case 'communication': break;
     }
     if (!error) {
       setItems(prev => prev.filter(i => i.id !== deleteTarget.id));
@@ -171,7 +168,7 @@ export default function AdminArchives() {
           case 'entity': ({ error } = await supabase.from('settings_entities').delete().eq('id', item.id)); break;
           case 'invoice': ({ error } = await supabase.from('invoices').delete().eq('id', item.id)); break;
           case 'asset': ({ error } = await supabase.from('assets').delete().eq('id', item.id)); break;
-          case 'communication': try { ({ error } = await supabase.from('communications').delete().eq('id', item.id)); } catch { error = null; } break;
+          case 'communication': break;
         }
         if (!error) successCount++;
       }
