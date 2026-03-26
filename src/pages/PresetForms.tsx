@@ -21,9 +21,12 @@ import { Plus, Trash2, GripVertical, ChevronDown, HelpCircle, Mail, Eye, Send, S
 interface PresetField {
   id: string;
   label: string;
-  type: 'text' | 'textarea' | 'radio' | 'checkbox' | 'dropdown';
+  type: 'text' | 'textarea' | 'radio' | 'checkbox' | 'dropdown' | 'tooth_chart' | 'ipr_data' | 'tooth_movement' | 'feasibility' | 'images' | 'video' | 'audio' | 'model_analysis' | 'cephalometric' | 'notes';
   options?: string[];
   required: boolean;
+  linked_work_order_id?: string;
+  linked_plan_preset_id?: string;
+  fee?: number;
 }
 
 interface PresetRecord {
@@ -279,6 +282,7 @@ export default function PresetForms() {
           <TabsList className="flex flex-wrap h-auto gap-1 mb-6">
             <TabsTrigger value="work_order" className="text-xs">Work Orders</TabsTrigger>
             <TabsTrigger value="plan_preset" className="text-xs">Plan Presets</TabsTrigger>
+            <TabsTrigger value="request_type" className="text-xs">Request Types</TabsTrigger>
             <TabsTrigger value="fee" className="text-xs">Fees</TabsTrigger>
             <TabsTrigger value="item" className="text-xs">Items</TabsTrigger>
             <TabsTrigger value="discount" className="text-xs">Discounts</TabsTrigger>
@@ -335,12 +339,13 @@ export default function PresetForms() {
                         <Input value={field.label} onChange={e => updateField(idx, { label: e.target.value })} placeholder="Field label" className="h-8 text-xs" />
                         <Select value={field.type} onValueChange={v => updateField(idx, { type: v as any })}>
                           <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                          <SelectContent>
+                        <SelectContent>
                             <SelectItem value="text">Text</SelectItem>
                             <SelectItem value="textarea">Textarea</SelectItem>
                             <SelectItem value="radio">Radio</SelectItem>
                             <SelectItem value="checkbox">Checkbox</SelectItem>
                             <SelectItem value="dropdown">Dropdown</SelectItem>
+                            <SelectItem value="tooth_chart">🦷 Tooth Chart</SelectItem>
                           </SelectContent>
                         </Select>
                         {['radio', 'checkbox', 'dropdown'].includes(field.type) && (
@@ -365,18 +370,41 @@ export default function PresetForms() {
           <TabsContent value="plan_preset">
             <Card>
               <CardHeader><CardTitle className="text-base">Plan Presets</CardTitle>
-                <p className="text-xs text-muted-foreground">Create plan templates (aligner, orthodontic, etc.) that auto-apply when a work order type is selected.</p>
+                <p className="text-xs text-muted-foreground">Create plan templates with dental-specific sections. These auto-apply when linked work order types are selected.</p>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1"><Label className="text-xs">Plan Preset Name *</Label><Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Standard Aligner Plan" /></div>
+                  <div className="space-y-1"><Label className="text-xs">Plan Preset Name *</Label><Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Orthodontic Plan" /></div>
                   <div className="space-y-1"><Label className="text-xs">Linked Work Order Type</Label><Input value={newDescription} onChange={e => setNewDescription(e.target.value)} placeholder="e.g. Standard Aligner" /></div>
+                </div>
+
+                {/* Quick-add section types */}
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold">Quick Add Sections</Label>
+                  <div className="flex flex-wrap gap-1.5 p-3 bg-muted/30 rounded-lg border border-border/50">
+                    {[
+                      { label: '📊 IPR Data', type: 'ipr_data' as const },
+                      { label: '🦷 Tooth Movement', type: 'tooth_movement' as const },
+                      { label: '🔬 Feasibility', type: 'feasibility' as const },
+                      { label: '📷 Images', type: 'images' as const },
+                      { label: '🎥 Video', type: 'video' as const },
+                      { label: '🎙️ Audio', type: 'audio' as const },
+                      { label: '📐 Model Analysis', type: 'model_analysis' as const },
+                      { label: '📏 Cephalometric', type: 'cephalometric' as const },
+                      { label: '📝 Notes', type: 'notes' as const },
+                    ].map(s => (
+                      <Badge key={s.type} variant="outline" className="cursor-pointer hover:bg-accent text-xs py-1 gap-1"
+                        onClick={() => addField({ label: s.label.replace(/^[^\s]+ /, ''), type: s.type, required: false })}>
+                        <Plus className="w-2.5 h-2.5" /> {s.label}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label className="text-xs font-semibold">Default Plan Sections</Label>
-                    <Button size="sm" variant="outline" onClick={() => addField({ label: '', type: 'text', required: false })}><Plus className="w-3 h-3 mr-1" /> Section</Button>
+                    <Label className="text-xs font-semibold">Plan Sections ({newFields.length})</Label>
+                    <Button size="sm" variant="outline" onClick={() => addField({ label: '', type: 'notes', required: false })}><Plus className="w-3 h-3 mr-1" /> Custom Section</Button>
                   </div>
                   {newFields.map((field, idx) => (
                     <div key={field.id} className="flex items-start gap-2 p-2 rounded border border-border/50 bg-muted/20">
@@ -386,11 +414,15 @@ export default function PresetForms() {
                         <Select value={field.type} onValueChange={v => updateField(idx, { type: v as any })}>
                           <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="text">Text Notes</SelectItem>
-                            <SelectItem value="textarea">Detailed Notes</SelectItem>
-                            <SelectItem value="radio">Image Section</SelectItem>
-                            <SelectItem value="checkbox">File Upload</SelectItem>
-                            <SelectItem value="dropdown">IPR Data</SelectItem>
+                            <SelectItem value="ipr_data">📊 IPR Data</SelectItem>
+                            <SelectItem value="tooth_movement">🦷 Tooth Movement</SelectItem>
+                            <SelectItem value="feasibility">🔬 Feasibility</SelectItem>
+                            <SelectItem value="images">📷 Images</SelectItem>
+                            <SelectItem value="video">🎥 Video</SelectItem>
+                            <SelectItem value="audio">🎙️ Audio</SelectItem>
+                            <SelectItem value="model_analysis">📐 Model Analysis</SelectItem>
+                            <SelectItem value="cephalometric">📏 Cephalometric</SelectItem>
+                            <SelectItem value="notes">📝 Notes</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -398,7 +430,65 @@ export default function PresetForms() {
                     </div>
                   ))}
                 </div>
-                <Button onClick={addPreset} size="sm" className="gap-1"><Plus className="w-3 h-3" /> Add Plan Preset</Button>
+                <Button onClick={addPreset} size="sm" className="gap-1"><Plus className="w-3 h-3" /> Save Plan Preset</Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Request Types */}
+          <TabsContent value="request_type">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Request Types</CardTitle>
+                <p className="text-xs text-muted-foreground">Define request types that users select when submitting cases. Each links to work order form(s) and a plan preset.</p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1"><Label className="text-xs">Request Type Name *</Label><Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Standard Aligner" /></div>
+                  <div className="space-y-1"><Label className="text-xs">Fee ($)</Label><Input type="number" value={newFee} onChange={e => setNewFee(e.target.value)} placeholder="0" /></div>
+                </div>
+                <div className="space-y-1"><Label className="text-xs">Description</Label><Input value={newDescription} onChange={e => setNewDescription(e.target.value)} placeholder="Description of this request type" /></div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Linked Work Order Form</Label>
+                    <Select value={newUnit || ''} onValueChange={setNewUnit}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select work order..." /></SelectTrigger>
+                      <SelectContent>
+                        {presets.filter(p => p.category === 'work_order').map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Linked Plan Preset</Label>
+                    <Select value={newDiscountValue || ''} onValueChange={setNewDiscountValue}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select plan preset..." /></SelectTrigger>
+                      <SelectContent>
+                        {presets.filter(p => p.category === 'plan_preset').map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <Button onClick={async () => {
+                  if (!newName || !user) return;
+                  const payload: any = {
+                    name: newName, fee_usd: parseFloat(newFee) || 0, type: 'case',
+                    category: 'request_type', user_id: user.id, description: newDescription || null,
+                    unit: newUnit || null, // stores linked_work_order_id
+                    discount_value: newDiscountValue ? parseFloat(newDiscountValue) : null, // stores linked_plan_preset_id (as reference)
+                  };
+                  const { data, error } = await supabase.from('presets').insert(payload).select().single();
+                  if (!error && data) {
+                    setPresets(prev => [...prev, { ...data, fields: (data.fields as any) || [] } as PresetRecord]);
+                    resetForm();
+                    toast.success('Request type added');
+                  }
+                }} size="sm" className="gap-1"><Plus className="w-3 h-3" /> Add Request Type</Button>
               </CardContent>
             </Card>
           </TabsContent>
