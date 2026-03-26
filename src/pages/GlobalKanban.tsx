@@ -134,6 +134,15 @@ export default function GlobalKanban() {
     return data;
   }, [filteredPlans]);
 
+  // Toggle plan status for non-admin users (approve/reject)
+  const togglePlanApproval = async (planId: string, newStatus: 'approved' | 'rejected') => {
+    const plan = plans.find(p => p.id === planId);
+    if (!plan) return;
+    await supabase.from('treatment_plans').update({ status: newStatus }).eq('id', planId);
+    setPlans(prev => prev.map(p => p.id === planId ? { ...p, status: newStatus } : p));
+    toast.success(`Plan ${newStatus}`);
+  };
+
   const onPlanDragEnd = async (result: DropResult) => {
     if (!isAdmin) return;
     const { destination, draggableId } = result;
@@ -216,9 +225,9 @@ export default function GlobalKanban() {
 
         {loading ? <p className="text-center py-10 text-muted-foreground">Loading...</p> : activeView === 'plans' ? (
           <DragDropContext onDragEnd={onPlanDragEnd}>
-            <div className="flex gap-4 overflow-x-auto pb-4 min-h-[600px]">
+            <div className="flex gap-4 overflow-x-auto pb-4 min-h-[400px] md:min-h-[600px] snap-x snap-mandatory md:snap-none">
               {PLAN_COLUMNS.map(column => (
-                <div key={column.id} className="flex-shrink-0 w-80 flex flex-col gap-3">
+                <div key={column.id} className="flex-shrink-0 w-72 sm:w-80 snap-start flex flex-col gap-3">
                   <div className="flex items-center gap-2 px-2">
                     <div className={`w-2 h-2 rounded-full ${column.color}`} />
                     <h3 className="font-semibold text-sm">{column.title}</h3>
@@ -232,7 +241,7 @@ export default function GlobalKanban() {
                           {planColumnsData[column.id]?.map((plan, index) => {
                             const sla = getSlaInfo(plan.created_at);
                             return (
-                              <Draggable key={plan.id} draggableId={plan.id} index={index} isDragDisabled={!isAdmin}>
+                                <Draggable key={plan.id} draggableId={plan.id} index={index} isDragDisabled={!isAdmin}>
                                 {(provided, snapshot) => (
                                   <Card ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}
                                     className={`shadow-sm hover:shadow-md transition-shadow cursor-pointer ${snapshot.isDragging ? 'ring-2 ring-primary' : ''}`}
@@ -269,6 +278,17 @@ export default function GlobalKanban() {
                                           )}
                                         </div>
                                       </div>
+                                      {/* Approve/Reject for non-admin users */}
+                                      {!isAdmin && (plan.status === 'published' || plan.status === 'ongoing') && (
+                                        <div className="flex gap-1 pt-1" onClick={e => e.stopPropagation()}>
+                                          <Button variant="outline" size="sm" className="h-6 text-[10px] text-green-600 flex-1" onClick={() => togglePlanApproval(plan.id, 'approved')}>
+                                            <CheckCircle2 className="w-3 h-3 mr-0.5" /> Approve
+                                          </Button>
+                                          <Button variant="outline" size="sm" className="h-6 text-[10px] text-destructive flex-1" onClick={() => togglePlanApproval(plan.id, 'rejected')}>
+                                            <XCircle className="w-3 h-3 mr-0.5" /> Reject
+                                          </Button>
+                                        </div>
+                                      )}
                                       {/* SLA Progress */}
                                       <div className="space-y-0.5">
                                         <div className="flex items-center justify-between text-[9px] text-muted-foreground">
@@ -320,7 +340,7 @@ export default function GlobalKanban() {
                         {c.clinic_name && ` • ${c.clinic_name}`}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0 flex-wrap">
                       {isAdmin && (
                         <>
                           {c.status === 'pending' && (
