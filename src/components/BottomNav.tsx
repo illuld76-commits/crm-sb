@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutGrid, FolderOpen, PlusCircle, MessageSquare, Menu } from 'lucide-react';
+import { LayoutGrid, FolderOpen, PlusCircle, MessageSquare, Menu, Columns3 } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

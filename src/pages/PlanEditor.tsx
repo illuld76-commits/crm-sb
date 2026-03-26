@@ -12,7 +12,8 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
-import { ArrowLeft, Save, Upload, Eye, Trash2, FileText, Image, Pencil, ChevronDown, ChevronRight, Mic, Video, Plus, MousePointerClick, FlaskConical, Scan } from 'lucide-react';
+import { ArrowLeft, Save, Upload, Eye, Trash2, FileText, Image, Pencil, ChevronDown, ChevronRight, Mic, Video, Plus, MousePointerClick, FlaskConical, Scan, Undo2 } from 'lucide-react';
+import { logAction } from '@/lib/audit';
 import SnaponLogo from '@/components/SnaponLogo';
 import { parseIPRCSV, parseToothMovementCSV, parseCombinedCSV, readFileAsText, readFileAsTextUTF8, IPRData, ToothMovementData } from '@/lib/csv-parser';
 import IPRQuadrantDiagram, { getAllContactKeys } from '@/components/IPRQuadrantDiagram';
@@ -216,9 +217,22 @@ export default function PlanEditor() {
     if (!planId) return;
     const { data, error } = await supabase.from('treatment_plans').update({ status: 'published' }).eq('id', planId).select('share_token').single();
     if (error) { toast.error('Failed to publish'); } else {
+      setPlanStatus('published');
       const url = `${window.location.origin}/report/${data.share_token}`;
       navigator.clipboard.writeText(url);
       toast.success('Published! Share link copied.');
+      await logAction({ action: 'Publish Plan', target_type: 'plan', target_id: planId, target_name: planName, user_id: user?.id || '', user_name: user?.email || '', details: 'Plan published and share link generated' });
+    }
+  };
+
+  const unpublishPlan = async () => {
+    if (!planId) return;
+    const { error } = await supabase.from('treatment_plans').update({ status: 'saved' }).eq('id', planId);
+    if (error) { toast.error('Failed to unpublish'); } else {
+      setPlanStatus('saved');
+      setIsEditing(true);
+      toast.success('Plan unpublished. It is now editable.');
+      await logAction({ action: 'Unpublish Plan', target_type: 'plan', target_id: planId, target_name: planName, user_id: user?.id || '', user_name: user?.email || '', details: 'Plan unpublished and reverted to saved state' });
     }
   };
 
@@ -731,6 +745,13 @@ export default function PlanEditor() {
                 <Button size="sm" onClick={publishPlan} className="dental-gradient" disabled={saving || !planName}>
                   <Eye className="w-3 h-3 mr-1" /> Publish
                 </Button>
+                {isAdmin && planStatus === 'published' && (
+                  <Button variant="outline" size="sm" className="text-orange-600 border-orange-300" onClick={() => {
+                    if (confirm('Unpublish this plan? The public share link will stop working.')) unpublishPlan();
+                  }}>
+                    <Undo2 className="w-3 h-3 mr-1" /> Unpublish
+                  </Button>
+                )}
               </>
             )}
           </div>
@@ -1278,6 +1299,13 @@ export default function PlanEditor() {
           <Button size="sm" onClick={publishPlan} className="dental-gradient" disabled={saving || !planName}>
             <Eye className="w-3 h-3 mr-1" /> Publish
           </Button>
+          {isAdmin && planStatus === 'published' && (
+            <Button variant="outline" size="sm" className="text-orange-600 border-orange-300" onClick={() => {
+              if (confirm('Unpublish this plan? The public share link will stop working.')) unpublishPlan();
+            }}>
+              <Undo2 className="w-3 h-3 mr-1" /> Unpublish
+            </Button>
+          )}
         </div>
       </div>
     </div>
