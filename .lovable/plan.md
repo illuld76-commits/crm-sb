@@ -1,166 +1,160 @@
 
 
-# Comprehensive Enhancement Plan for inkd-Portal
+# Comprehensive Enhancement Plan — Presets, Request Types, Workflow & UX
 
-This plan addresses all 17 issues raised, organized into implementable batches.
-
----
-
-## Batch A: Media Preview & File Management Fixes (Issues 2, 3, 4, 10)
-
-**Problem:** Clicking images/media in published plan links and chat doesn't open a larger preview. Admin lacks view/download toggle controls globally. No global asset browser.
-
-**Changes:**
-- **ReportView.tsx**: Wrap image sections in clickable handlers that open `FilePreviewModal` with close-on-Esc support (already exists in modal component).
-- **CommunicationHub.tsx**: Add click-to-preview on chat attachment thumbnails using `FilePreviewModal`. Add Esc/close button support.
-- **PatientDetail.tsx (Assets tab)**: Add click-to-preview on asset thumbnails. Admin view/download toggles already exist (lines 928-941) -- verify they work for all asset types.
-- **New page: GlobalAssets.tsx**: A searchable, filterable global asset browser page with live search, category filter, and file type filter. Admin can bulk-toggle view/download. Add route `/assets` and sidebar link.
+This plan covers all items from the user's request, organized into implementable batches.
 
 ---
 
-## Batch B: Dashboard & Plan Editor Fixes (Issues 1, 12)
+## Batch 1: Plan Presets Enhancement (Issue 1)
 
-**Problem:** Publish arrow button missing in dashboard expanded case view. Plans editable immediately on open, risking accidental changes.
+**Goal:** Make the existing plan preset (orthodontic) saveable with a proper name, and add rich section types including tooth movement CSV parser and IPR CSV parser as available section types.
 
-**Changes:**
-- **Dashboard.tsx (renderExpandedPhases)**: Add share/publish button for published plans (currently only shows `Copy` icon for report link but no publish action arrow). Restore the external link / share icon.
-- **PlanEditor.tsx**: Add a read-only mode by default. When plan status is `published` or `saved`, load in view mode. Show an "Edit" button to unlock editing. Track `isEditing` state.
-
----
-
-## Batch C: Activity Timeline Fix (Issue 5)
-
-**Problem:** Timeline doesn't show audit logs with user IDs for the specific case.
-
-**Changes:**
-- **PatientDetail.tsx**: The audit log fetch currently filters by `target_id = patient.id`. Expand query to also include logs where `target_type` is `plan`, `phase`, `case_request`, `invoice`, etc. AND the target belongs to this case (join via phase/plan IDs). Display `user_id` alongside `user_name` in timeline entries.
+**Changes — `src/pages/PresetForms.tsx`:**
+- Rename existing plan preset section types from generic text/textarea/radio/checkbox/dropdown to dental-specific types: `ipr_data`, `tooth_movement`, `feasibility`, `images`, `video`, `audio`, `model_analysis`, `cephalometric`, `notes`
+- Each section type maps to what PlanEditor already supports — when a plan is created from a preset, these sections are auto-added
+- Add a "Save as Orthodontic Plan" default preset with all current PlanEditor sections pre-configured
+- Save the preset with `category: 'plan_preset'` and section definitions in the `fields` JSON column
 
 ---
 
-## Batch D: Mobile Responsiveness Audit (Issue 5b)
+## Batch 2: Request Types as Preset Items + Work Order Form Linking (Issue 2)
 
-**Problem:** Not all modules are mobile-compatible.
+**Goal:** Request types should be manageable in Presets. Each request type links to a work order form preset. Users select request types with qty in case submission, and the corresponding form loads.
+
+**Changes — `src/pages/PresetForms.tsx`:**
+- Add a new tab **"Request Types"** (`request_type` category)
+- Each request type preset has: name, description, linked work order preset ID(s), linked plan preset ID, fee
+- Admin can create/edit request types and associate existing work order form presets
+
+**Changes — `src/pages/CaseSubmission.tsx`:**
+- Replace the hardcoded request type dropdown with dynamic list from `presets` where `category = 'request_type'` (fallback to work_order presets + hardcoded defaults for backward compat)
+- Allow **multiple request types** selection, each with a quantity input
+- When a request type is selected, load its linked work order form preset and render the dynamic form fields for user to fill
+- Store selected request types + quantities + form data in `case_request.dynamic_data`
+
+**Changes — `src/pages/CaseSubmission.tsx` (admin accept flow):**
+- When admin accepts a case request, auto-select the plan preset linked to the submitted request type(s)
+- Admin can override/change the plan preset before conversion
+- Case name derives from request type name(s)
+- Each request type can generate a separate plan under the case
+
+---
+
+## Batch 3: Interactive Tooth Chart for Work Order Forms (Issue 2 continued)
+
+**Goal:** For non-orthodontic dental work (crowns, bridges, veneers, splints), provide an interactive tooth chart in work order form presets where users click teeth and assign work types.
+
+**Changes — New component `src/components/ToothChartSelector.tsx`:**
+- Interactive Palmer notation diagram (reuse `PalmerArchDiagram` patterns)
+- Click individual teeth or drag-select ranges
+- For each selection, user picks work type (crown, bridge, veneer, splint, etc.) from a dropdown
+- Displays a summary table: teeth selected → work type → notes
+- Outputs structured JSON for storage in `dynamic_data`
+
+**Changes — `src/pages/PresetForms.tsx`:**
+- Add `tooth_chart` as a new field type in work order form builder
+- When this field type is added to a form, the ToothChartSelector renders at submission time
+
+**Changes — `src/pages/CaseSubmission.tsx`:**
+- Render `ToothChartSelector` when a work order form contains a `tooth_chart` field
+
+---
+
+## Batch 4: Multi-Request Case Conversion + Invoicing Link (Issue 2 continued)
+
+**Changes — `src/pages/CaseSubmission.tsx` (updateStatus):**
+- When converting to case, create one plan per request type using the linked plan preset
+- Plan names = request type names
+- Store `case_request_id` on each plan for invoicing linkage
+
+**Changes — `src/pages/Billing.tsx`:**
+- When creating invoice from a case that has `case_request_id`, auto-populate line items from request types + quantities + fees from presets
+
+---
+
+## Batch 5: Archives Completeness (Issue 2 tail)
+
+**Changes — `src/pages/AdminArchives.tsx`:**
+- Verify all entity types with `is_deleted` flag appear in archives
+- Currently missing: communications (no `is_deleted` column). Add client-side note that communications archival requires DB migration.
+- Ensure soft-delete is called (not hard-delete) across all delete actions in the app
+
+**Audit across files:** Check all `delete()` calls and convert to `update({ is_deleted: true })` where applicable for: plans, phases, case_requests, invoices, assets, entities.
+
+---
+
+## Batch 6: Unpublish Plans + Admin Controls (Issue from request)
+
+**Changes — `src/pages/PlanEditor.tsx`:**
+- Add "Unpublish" button for admin when plan status is `published`
+- Sets status back to `saved`, removes public share link access
+- Add confirmation dialog before unpublishing
+
+---
+
+## Batch 7: User Dashboard Enhancements (Issue from request)
+
+**Changes — `src/pages/UserDashboard.tsx`:**
+- Add case status badges, published plan count, and quick status summary per case card
+- Add expandable/collapsible phase→plan tree view (similar to admin Dashboard's `renderExpandedPhases`)
+- Add navigation to plan view and share link copy for published plans
+
+---
+
+## Batch 8: User Kanban Access (Issue from request)
+
+**Changes — `src/pages/GlobalKanban.tsx`:**
+- Already partially done. Verify non-admin users see only RBAC-filtered cases/plans
+- Add Kanban link to user's `BottomNav` and sidebar
+
+**Changes — `src/components/Sidebar.tsx` and `src/components/BottomNav.tsx`:**
+- Add Kanban route for non-admin users
+
+---
+
+## Batch 9: Activity Logs & Notifications Integration (Issue from request)
+
+**Changes — audit `logAction` calls across:**
+- `CaseSubmission.tsx`: Log on accept, reject, convert, status change with `target_type: 'case_request'`
+- `PlanEditor.tsx`: Log on publish, unpublish, save with `target_type: 'plan'`
+- `Billing.tsx`: Log on invoice create/send with `target_type: 'invoice'`
+- Ensure `target_name` includes case name and request type for context
+
+**Changes — `src/lib/notifications.ts`:**
+- Verify `sendNotification` is called at key points
+- Add notification on plan publish, case status change, invoice sent
+
+**Changes — `src/pages/UserDashboard.tsx`:**
+- Show recent activity logs for user's own cases (filtered by RBAC)
+
+---
+
+## Batch 10: Relational Navigation Verification
 
 **Changes across all pages:**
-- **Dashboard.tsx**: KPI row already `grid-cols-2 lg:grid-cols-4` (good). Ensure filter bar wraps on mobile. Case cards already responsive.
-- **GlobalKanban.tsx**: Add horizontal scroll for Kanban columns on mobile. Make cards stack properly.
-- **BillingList.tsx / Billing.tsx**: Ensure invoice cards and form inputs are full-width on mobile. Invoice detail sheet should be full-screen on mobile.
-- **ReportView.tsx / JourneyView.tsx**: Already responsive; verify media sections.
-- **PatientDetail.tsx**: Tab list should scroll horizontally on mobile (5 tabs). Phase tree should be collapsible.
-- **Messages.tsx**: Split view (conversation list + chat) should stack vertically on mobile.
-- **SubmittedCases.tsx**: Cards should be full-width on mobile.
-- **BottomNav.tsx**: Already exists for mobile -- verify all key routes accessible.
+- Verify `useRelationalNav().openPreview()` calls exist on clickable entity references (invoices, plans, cases, case requests)
+- Add missing relational links in Dashboard cards, Kanban cards, Billing rows, and Messages
 
 ---
 
-## Batch E: Case Request Existing Patient Dropdown (Issue 6)
+## Implementation Priority
 
-**Problem:** When creating a case request for an existing patient, no dropdown/live search appears.
-
-**Changes:**
-- **CaseSubmission.tsx**: The patient search already exists (lines 41-44, 78-80) but needs improvement. Replace the text-input-based search with a proper searchable Select/Combobox component that shows matching patients as a dropdown list on 2+ character input. Show patient name, doctor, and clinic in results.
-
----
-
-## Batch F: RBAC Verification & Additional User Assignment (Issues 7, 8)
-
-**Problem:** Need to verify RBAC is consistent. Admin should be able to assign additional users to cases.
-
-**Changes:**
-- **RBAC audit**: Verify all data-fetching pages filter by `checkAccess()` for non-admin users. Key pages: Dashboard, GlobalKanban, BillingList, Messages, SubmittedCases.
-- **PatientDetail.tsx**: Add "Assign Additional User" button for admin. Shows a user picker (from profiles) to set `primary_user_id` or `secondary_user_id`, or create a new `user_assignments` record linking user to this patient/clinic/doctor/lab/company. This user then gets RBAC-based access.
-- **TeamManagement.tsx**: Enhance assignment creation to support assigning to additional entities beyond current types.
-
----
-
-## Batch G: Relational Navigation & Archives Completeness (Issue 9)
-
-**Problem:** Cross-entity navigation missing. Archives don't show all deleted entity types.
-
-**Changes:**
-- **RelationalPreviewDrawer.tsx**: Enhance to support previewing invoices, case requests, plans, phases, and communications. Add clickable links/badges throughout the app that call `openPreview()`.
-- **AdminArchives.tsx**: Already handles cases, plans, phases, case_requests, entities, invoices, assets. Add support for: deleted users (soft-delete profiles), deleted communications, deleted work orders. Add bulk select with checkboxes for multi-restore/delete.
-- **Audit logs**: Enhance `logAction` calls throughout the app to include richer `target_type` and `target_name` for better activity tracking.
-
----
-
-## Batch H: Audio Transcription Fix (Issue 11)
-
-**Problem:** Speech-to-text transcript quality is poor.
-
-**Changes:**
-- **AudioRecorder.tsx**: Currently calls a Supabase edge function `transcribe-audio`. The issue is likely the edge function implementation. Options:
-  1. Use the Web Speech API (`webkitSpeechRecognition`) as a client-side fallback for real-time transcription.
-  2. Improve the edge function to use a better STT model (e.g., ElevenLabs Scribe or OpenAI Whisper).
-- Add a note in the UI that transcription can be manually edited before approval (already exists).
-
----
-
-## Batch I: Messages Read/Unread & Search (Issue 13)
-
-**Problem:** No read/unread logic for messages. No live search filter.
-
-**Changes:**
-- **Database**: Add `read_by` jsonb column to `communications` table (or a separate `message_reads` table with `user_id` + `message_id`).
-- **Messages.tsx**: Implement read/unread badge on conversation list. Mark as read when conversation is opened. Add live search filter input to filter conversations by patient name or message content.
-- **CommunicationHub.tsx**: Mark messages as read on view.
-
----
-
-## Batch J: Remark Attachments & User Kanban Access (Issues 14, 15)
-
-**Problem:** Users can't add attachments to workbench remarks. Users can't access Kanban for their own cases.
-
-**Changes:**
-- **PatientDetail.tsx (Workbench remarks)**: Add file attachment support to the remark input. Upload to Supabase storage, store attachment metadata in remark record or a linked table.
-- **GlobalKanban.tsx**: Remove admin-only restriction. Non-admin users see only their RBAC-accessible cases/plans. Add case request view-only cards. Add approve/reject toggle for plans (updates plan status).
-- **Dashboard for users**: Add expandable case list view with phase/plan tree navigation. Users can view and share published plan links.
-
----
-
-## Batch K: Plan Presets & Work Order Linking (Issue 16)
-
-**Problem:** Plan presets should be manageable in Presets section. Work orders should link to plan presets.
-
-**Changes:**
-- **PresetForms.tsx**: Add a "Plan Presets" tab alongside existing presets. Admin can create/edit plan preset templates (aligner, orthodontic, etc.) with default sections.
-- **CaseSubmission.tsx**: When linking to existing case, show a work order name input. When a work order type is selected, auto-apply the corresponding plan preset.
-- **WorkOrderDetail.tsx**: Link work orders to plan presets. Show which preset was used.
-
----
-
-## Batch L: Notifications Verification (Issue 17)
-
-**Problem:** Confirm notifications are working.
-
-**Changes:**
-- Verify `sendNotification()` calls exist at all key action points: case request submission, acceptance, plan publish, message received, @mention, invoice creation.
-- Verify `NotificationBell` component fetches and displays unread notifications.
-- Verify `Notifications.tsx` page shows full notification history.
-
----
-
-## Implementation Priority Order
-
-1. **Batch B** (Dashboard fix + Plan edit lock) -- quick fixes
-2. **Batch A** (Media preview) -- high-impact UX
-3. **Batch C** (Timeline fix) -- data correctness
-4. **Batch E** (Patient dropdown) -- workflow fix
-5. **Batch D** (Mobile audit) -- across all modules
-6. **Batch F** (RBAC + user assignment) -- access control
-7. **Batch G** (Relational nav + archives) -- large scope
-8. **Batch I** (Messages read/unread) -- communication
-9. **Batch J** (Remarks attachments + user Kanban) -- user features
-10. **Batch H** (Audio transcription) -- quality improvement
-11. **Batch K** (Plan presets + work orders) -- advanced workflow
-12. **Batch L** (Notifications check) -- verification
-
----
+1. **Batch 1** — Plan presets with proper section types
+2. **Batch 2** — Request types + work order form linking
+3. **Batch 3** — Tooth chart component
+4. **Batch 4** — Multi-request conversion + invoicing
+5. **Batch 6** — Unpublish plans
+6. **Batch 7** — User dashboard enhancements
+7. **Batch 8** — User Kanban access
+8. **Batch 5** — Archives completeness
+9. **Batch 9** — Activity logs & notifications
+10. **Batch 10** — Relational navigation
 
 ## Technical Notes
 
-- **Files modified**: ~15 existing files, ~2 new files (GlobalAssets page, message_reads migration)
-- **Database migrations needed**: `message_reads` table, `read_by` or similar for communications, plan presets table
-- **No backend changes**: All logic stays client-side with Supabase queries
-- **Mobile approach**: Use Tailwind responsive classes (`sm:`, `md:`, `lg:`) and `overflow-x-auto` for horizontal scroll on Kanban
+- **Files modified:** ~10 existing files
+- **New files:** 1 (`ToothChartSelector.tsx`)
+- **No DB migrations needed** — all data stored in existing JSON columns (`fields`, `dynamic_data`)
+- **Backward compatible** — existing presets and case requests continue working; new request type presets are additive
 
