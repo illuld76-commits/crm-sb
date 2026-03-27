@@ -48,6 +48,7 @@ export default function CaseSubmission() {
   const [patientSearch, setPatientSearch] = useState('');
   const [patientResults, setPatientResults] = useState<{ id: string; patient_name: string; doctor_name: string | null; clinic_name: string | null }[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [patientSearchFocused, setPatientSearchFocused] = useState(false);
 
   // Settings entities for dropdowns
   const [settingsEntities, setSettingsEntities] = useState<{ entity_name: string; entity_type: string }[]>([]);
@@ -188,8 +189,26 @@ export default function CaseSubmission() {
       if (!patientErr && newPatient) {
         patientIdToLink = newPatient.id;
         // Create initial phase
-        await supabase.from('phases').insert({ patient_id: newPatient.id, phase_name: 'Initial Treatment', phase_order: 0 });
-        toast.success('Patient record created and linked');
+        const { data: newPhase } = await supabase.from('phases').insert({ patient_id: newPatient.id, phase_name: 'Initial Treatment', phase_order: 0 }).select('id').single();
+
+        // Auto-create treatment plan from linked preset if available
+        if (newPhase) {
+          const requestTypeName = caseData!.request_type;
+          const reqTypePreset = presets.find(p => p.category === 'request_type' && p.name === requestTypeName);
+          const planPresetId = reqTypePreset?.description; // stores linked plan preset ID in description field
+          const planPreset = planPresetId ? presets.find(p => p.id === planPresetId) : null;
+          const planName = planPreset ? planPreset.name : requestTypeName || 'Treatment Plan';
+
+          await supabase.from('treatment_plans').insert({
+            phase_id: newPhase.id,
+            plan_name: planName,
+            plan_date: new Date().toISOString().split('T')[0],
+            notes: `Auto-created from case request: ${requestTypeName}`,
+            status: 'draft',
+          });
+        }
+
+        toast.success('Patient record, phase, and plan created');
       }
     }
 
@@ -479,15 +498,20 @@ export default function CaseSubmission() {
                   placeholder="Search existing patients..."
                   value={patientSearch}
                   onChange={e => setPatientSearch(e.target.value)}
+                  onFocus={() => setPatientSearchFocused(true)}
+                  onBlur={() => setTimeout(() => setPatientSearchFocused(false), 200)}
                 />
-                {patientResults.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-popover border rounded-md shadow-md">
-                    {patientResults.map(p => (
+                {patientSearchFocused && patientSearch.length >= 2 && (
+                  <div className="absolute z-10 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
+                    {patientResults.length > 0 ? patientResults.map(p => (
                       <div key={p.id} className="px-3 py-2 text-sm hover:bg-accent cursor-pointer" onClick={() => selectExistingPatient(p)}>
                         <span className="font-medium">{p.patient_name}</span>
                         {p.doctor_name && <span className="text-muted-foreground"> • {p.doctor_name}</span>}
+                        {p.clinic_name && <span className="text-muted-foreground text-xs"> • {p.clinic_name}</span>}
                       </div>
-                    ))}
+                    )) : (
+                      <div className="px-3 py-2 text-sm text-muted-foreground">No patients found</div>
+                    )}
                   </div>
                 )}
               </div>
