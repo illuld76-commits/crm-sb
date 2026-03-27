@@ -628,7 +628,8 @@ export default function Dashboard() {
                         const isArchived = activeTab === 'archived';
 
                         return (
-                          <tr key={p.id} className={`border-b border-border/50 hover:bg-muted/30 cursor-pointer transition-colors ${isArchived ? 'opacity-70' : ''}`} onClick={() => !isArchived && navigate(`/patient/${p.id}`)}>
+                          <React.Fragment key={p.id}>
+                          <tr className={`border-b border-border/50 hover:bg-muted/30 cursor-pointer transition-colors ${isArchived ? 'opacity-70' : ''}`} onClick={() => !isArchived && navigate(`/patient/${p.id}`)}>
                             <td className="py-2 px-3">
                               <div className="font-medium">{p.patient_name}</div>
                               <div className="text-xs text-muted-foreground">
@@ -656,6 +657,9 @@ export default function Dashboard() {
                                   </>
                                 ) : (
                                   <>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={e => toggleExpand(p.id, e)} title="Expand phases">
+                                      {expandedCases.has(p.id) ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                    </Button>
                                     {p.share_token && (
                                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={e => copyLink(p.share_token!, 'journey', e)} title="Copy journey link">
                                         <Link2 className="w-3 h-3" />
@@ -669,6 +673,14 @@ export default function Dashboard() {
                               </div>
                             </td>
                           </tr>
+                          {!isArchived && expandedCases.has(p.id) && (
+                            <tr>
+                              <td colSpan={8} className="bg-muted/20 py-0">
+                                {renderExpandedPhases(p.id)}
+                              </td>
+                            </tr>
+                          )}
+                          </React.Fragment>
                         );
                       })}
                     </tbody>
@@ -677,6 +689,35 @@ export default function Dashboard() {
               )}
             </div>
           ))
+        )}
+
+        {/* Activity Timeline */}
+        {activityLogs.length > 0 && (
+          <div className="mt-6 space-y-3">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <HistoryIcon className="w-4 h-4" /> Recent Activity
+            </h2>
+            <div className="space-y-2">
+              {activityLogs.slice(0, 15).map(log => (
+                <Card key={log.id} className="hover:shadow-sm transition-shadow">
+                  <CardContent className="p-3 flex items-start gap-3">
+                    <div className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium capitalize">{log.action?.replace(/_/g, ' ')}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {log.target_name && <span>{log.target_name} • </span>}
+                        {log.user_name && <span>by {log.user_name} • </span>}
+                        {log.details}
+                      </p>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground shrink-0">
+                      {formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}
+                    </span>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
         )}
       </main>
 
