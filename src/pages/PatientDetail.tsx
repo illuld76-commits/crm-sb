@@ -173,6 +173,14 @@ export default function PatientDetail() {
   // Assets from assets table
   const [assets, setAssets] = useState<AssetRow[]>([]);
   const [assetPreviewFile, setAssetPreviewFile] = useState<PreviewFile | null>(null);
+  
+  // Tasks
+  const [tasks, setTasks] = useState<{ id: string; title: string; description: string; assigned_to: string | null; due_date: string | null; status: string; created_at: string; created_by: string }[]>([]);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskDesc, setNewTaskDesc] = useState('');
+  const [newTaskAssignee, setNewTaskAssignee] = useState('');
+  const [newTaskDue, setNewTaskDue] = useState('');
+  const [showAddTask, setShowAddTask] = useState(false);
 
   // All files across sections for Assets tab (plan_sections files)
   const allFiles = sections.filter((s) => s.file_url).map((s) => ({
