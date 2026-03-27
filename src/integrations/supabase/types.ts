@@ -111,6 +111,7 @@ export type Database = {
         Row: {
           attachments: Json | null
           clinic_name: string | null
+          converted_at: string | null
           created_at: string
           display_id: string | null
           doctor_name: string | null
@@ -137,6 +138,7 @@ export type Database = {
         Insert: {
           attachments?: Json | null
           clinic_name?: string | null
+          converted_at?: string | null
           created_at?: string
           display_id?: string | null
           doctor_name?: string | null
@@ -163,6 +165,7 @@ export type Database = {
         Update: {
           attachments?: Json | null
           clinic_name?: string | null
+          converted_at?: string | null
           created_at?: string
           display_id?: string | null
           doctor_name?: string | null
@@ -281,6 +284,8 @@ export type Database = {
           is_billable: boolean | null
           is_deleted: boolean | null
           notes: string | null
+          patient_id: string | null
+          user_id: string | null
           vendor_name: string | null
         }
         Insert: {
@@ -294,6 +299,8 @@ export type Database = {
           is_billable?: boolean | null
           is_deleted?: boolean | null
           notes?: string | null
+          patient_id?: string | null
+          user_id?: string | null
           vendor_name?: string | null
         }
         Update: {
@@ -307,6 +314,8 @@ export type Database = {
           is_billable?: boolean | null
           is_deleted?: boolean | null
           notes?: string | null
+          patient_id?: string | null
+          user_id?: string | null
           vendor_name?: string | null
         }
         Relationships: [

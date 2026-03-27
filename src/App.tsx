@@ -34,6 +34,8 @@ import NotFound from "./pages/NotFound";
 import WorkOrderDetail from "./pages/WorkOrderDetail";
 import Messages from "./pages/Messages";
 import GlobalAssets from "./pages/GlobalAssets";
+import ExpensesList from "./pages/ExpensesList";
+import ReceiptsList from "./pages/ReceiptsList";
 
 const queryClient = new QueryClient();
 
@@ -71,6 +73,8 @@ const App = () => (
                     <Route path="billing" element={<BillingList />} />
                     <Route path="billing/new" element={<ProtectedRoute requireAdmin><Billing /></ProtectedRoute>} />
                     <Route path="billing/:invoiceId" element={<Billing />} />
+                    <Route path="billing/expenses" element={<ExpensesList />} />
+                    <Route path="billing/receipts" element={<ReceiptsList />} />
                     <Route path="notification-settings" element={<ProtectedRoute requireAdmin><NotificationSettings /></ProtectedRoute>} />
                     <Route path="notifications" element={<Notifications />} />
                   </Route>

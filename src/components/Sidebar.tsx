@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Search, ChevronRight, PanelLeftClose, PanelLeftOpen, LayoutGrid, X, FilePlus, Archive, Settings as SettingsIcon, Bell, User, History, CreditCard, UserCog, Columns3, LogOut, MessageSquare, FolderOpen, Inbox, Briefcase } from 'lucide-react';
+import { Search, ChevronRight, PanelLeftClose, PanelLeftOpen, LayoutGrid, X, FilePlus, Archive, Settings as SettingsIcon, Bell, User, History, CreditCard, UserCog, Columns3, LogOut, MessageSquare, FolderOpen, Inbox, Briefcase, FileText, Receipt, DollarSign } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
@@ -45,6 +45,7 @@ export default function Sidebar({ patients, phases, plans, caseRequests, onClose
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isCasesExpanded, setIsCasesExpanded] = useState(false);
+  const [isBillingExpanded, setIsBillingExpanded] = useState(location.pathname.startsWith('/billing'));
   const [requestsPaneOpen, setRequestsPaneOpen] = useState(false);
   const [projectsPaneOpen, setProjectsPaneOpen] = useState(false);
   const [requestSearch, setRequestSearch] = useState('');
@@ -71,7 +72,7 @@ export default function Sidebar({ patients, phases, plans, caseRequests, onClose
     { to: '/messages', icon: MessageSquare, label: 'Messages', show: true },
     { to: '/notifications', icon: Bell, label: 'Notifications', show: true },
     { to: '/profile', icon: User, label: 'My Profile', show: true },
-    { to: '/billing', icon: CreditCard, label: 'Billing', show: true },
+    
     { to: '/assets', icon: FolderOpen, label: 'Global Assets', show: true },
     { to: '/audit-logs', icon: History, label: 'Activity Logs', show: true },
   ];
@@ -125,6 +126,27 @@ export default function Sidebar({ patients, phases, plans, caseRequests, onClose
           <div className="p-3 space-y-1">
             {/* Core Links */}
             {coreLinks.filter(l => l.show).map(renderNavLink)}
+
+            {/* Billing expandable section */}
+            <div className="pt-1">
+              <button
+                onClick={() => setIsBillingExpanded(!isBillingExpanded)}
+                className={`flex items-center justify-between w-full p-2 rounded-md text-sm font-medium transition-colors hover:bg-muted ${isBillingExpanded ? 'bg-accent/50 text-accent-foreground' : ''}`}
+              >
+                <span className="flex items-center gap-2">
+                  <CreditCard className="h-4 w-4 text-primary" />
+                  Billing
+                </span>
+                <ChevronRight className={`h-3 w-3 transition-transform ${isBillingExpanded ? 'rotate-90' : ''}`} />
+              </button>
+              {isBillingExpanded && (
+                <div className="ml-2 mt-1 space-y-0.5 border-l border-border/50 pl-3">
+                  {renderNavLink({ to: '/billing', icon: FileText, label: 'Invoices' })}
+                  {renderNavLink({ to: '/billing/expenses', icon: DollarSign, label: 'Expenses' })}
+                  {renderNavLink({ to: '/billing/receipts', icon: Receipt, label: 'Receipts' })}
+                </div>
+              )}
+            </div>
 
             {/* Cases & Projects Mega-Button */}
             <div className="pt-2">
