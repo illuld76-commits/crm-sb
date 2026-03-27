@@ -657,6 +657,64 @@ export default function CaseSubmission() {
               </div>
             </div>
 
+            {/* Request Items (qty + billing) */}
+            <Card className="border-border/50">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Request Items (Qty &amp; Billing)</Label>
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => {
+                    const reqTypePresets = presets.filter(p => p.category === 'request_type');
+                    if (reqTypePresets.length > 0) {
+                      const first = reqTypePresets[0];
+                      setSelectedRequestTypes(prev => [...prev, { presetId: first.id, name: first.name, qty: 1, fee: first.fee_usd || first.unit_price || 0 }]);
+                    } else {
+                      setSelectedRequestTypes(prev => [...prev, { presetId: '', name: formData.request_type || 'Service', qty: 1, fee: 0 }]);
+                    }
+                  }}>
+                    <Plus className="w-3 h-3 mr-1" /> Add Item
+                  </Button>
+                </div>
+                {selectedRequestTypes.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No items added. Click "Add Item" to include request types with quantities for billing.</p>
+                )}
+                {selectedRequestTypes.map((rt, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Select value={rt.name} onValueChange={v => {
+                      const preset = presets.find(p => p.category === 'request_type' && p.name === v);
+                      setSelectedRequestTypes(prev => prev.map((r, i) => i === idx ? { ...r, name: v, presetId: preset?.id || '', fee: preset?.fee_usd || preset?.unit_price || r.fee } : r));
+                    }}>
+                      <SelectTrigger className="flex-1 h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {presets.filter(p => p.category === 'request_type').map(p => (
+                          <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
+                        ))}
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <div className="flex items-center gap-1">
+                      <Label className="text-[10px] text-muted-foreground">Qty</Label>
+                      <Input type="number" className="w-16 h-8 text-xs" min={1} value={rt.qty}
+                        onChange={e => setSelectedRequestTypes(prev => prev.map((r, i) => i === idx ? { ...r, qty: parseInt(e.target.value) || 1 } : r))} />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Label className="text-[10px] text-muted-foreground">Rate</Label>
+                      <Input type="number" className="w-20 h-8 text-xs" value={rt.fee}
+                        onChange={e => setSelectedRequestTypes(prev => prev.map((r, i) => i === idx ? { ...r, fee: parseFloat(e.target.value) || 0 } : r))} />
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive shrink-0"
+                      onClick={() => setSelectedRequestTypes(prev => prev.filter((_, i) => i !== idx))}>
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ))}
+                {selectedRequestTypes.length > 0 && (
+                  <div className="text-xs text-right text-muted-foreground">
+                    Total: {selectedRequestTypes.reduce((s, r) => s + r.qty * r.fee, 0).toFixed(2)}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             <div className="space-y-2">
               <Label>Notes</Label>
               <Textarea value={formData.notes} onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))} rows={4} placeholder="Treatment notes, special instructions..." />
