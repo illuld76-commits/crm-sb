@@ -1,0 +1,9 @@
+ALTER TABLE settings_entities ADD COLUMN IF NOT EXISTS contact_person text;
+ALTER TABLE settings_entities ADD COLUMN IF NOT EXISTS email text;
+ALTER TABLE settings_entities ADD COLUMN IF NOT EXISTS phone text;
+ALTER TABLE settings_entities ADD COLUMN IF NOT EXISTS address text;
+ALTER TABLE settings_entities ADD COLUMN IF NOT EXISTS gst_number text;
+ALTER TABLE settings_entities ADD COLUMN IF NOT EXISTS city text;
+ALTER TABLE settings_entities ADD COLUMN IF NOT EXISTS state text;
+ALTER TABLE settings_entities ADD COLUMN IF NOT EXISTS country text;
+ALTER TABLE settings_entities ADD COLUMN IF NOT EXISTS notes text;
