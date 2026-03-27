@@ -773,8 +773,16 @@ export default function PatientDetail() {
                                     <span className="font-semibold text-lg">{plan.plan_name}</span>
                                     <Badge variant={plan.status === 'published' ? 'default' : 'outline'} className="text-xs">{plan.status}</Badge>
                                     {plan.plan_date && <span className="text-xs text-muted-foreground">{format(new Date(plan.plan_date), 'MMM d, yyyy')}</span>}
+                                    {activePhase && <Badge variant="outline" className="text-[9px]">Phase: {activePhase.phase_name}</Badge>}
                                   </div>
                                   {plan.notes && <p className="text-xs text-muted-foreground mt-1">{plan.notes}</p>}
+                                  {plan.share_token && plan.status === 'published' && (
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <Badge variant="default" className="text-[9px] gap-1 cursor-pointer" onClick={() => window.open(`${window.location.origin}/report/${plan.share_token}`, '_blank')}>
+                                        <ExternalLink className="w-2.5 h-2.5" /> Published Report
+                                      </Badge>
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="flex gap-1 shrink-0">
                                   {isAdmin && <Button variant="outline" size="sm" onClick={() => navigate(`/plan/${plan.id}`)}><Edit className="w-3 h-3 mr-1" /> Edit</Button>}

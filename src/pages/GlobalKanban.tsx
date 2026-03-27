@@ -168,6 +168,38 @@ export default function GlobalKanban() {
     await supabase.from('treatment_plans').update({ status: newStatus }).eq('id', draggableId);
     setPlans(prev => prev.map(p => p.id === draggableId ? { ...p, status: newStatus } : p));
     await logAction({ action: 'Kanban Move', target_type: 'plan', target_id: draggableId, target_name: plan.plan_name, user_id: user?.id || '', user_name: user?.email || '', details: `Plan moved to ${newStatus}`, old_value: plan.status, new_value: newStatus });
+    
+    // Auto-create draft invoice when plan is approved
+    if (newStatus === 'approved' && plan.status !== 'approved') {
+      try {
+        // Find linked request type to get fee
+        const { data: phaseData } = await supabase.from('phases').select('patient_id').eq('id', plan.phase_id).single();
+        if (phaseData) {
+          let fee = 0;
+          const { data: caseReqs } = await supabase.from('case_requests').select('request_type').eq('patient_id', phaseData.patient_id).limit(1);
+          if (caseReqs && caseReqs.length > 0) {
+            const { data: reqPreset } = await supabase.from('presets').select('fee_usd').eq('category', 'request_type').eq('name', caseReqs[0].request_type).single();
+            if (reqPreset) fee = reqPreset.fee_usd || 0;
+          }
+          await supabase.from('invoices').insert({
+            patient_id: phaseData.patient_id,
+            phase_id: plan.phase_id,
+            patient_name: plan.patient_name,
+            user_id: user?.id || '',
+            status: 'draft',
+            amount_usd: fee,
+            currency_local: 'INR',
+            exchange_rate: 1,
+            type: 'standard',
+            merchant_details: { name: 'Admin', email: user?.email || '' },
+            client_details: { name: plan.patient_name, email: '' },
+            items: fee > 0 ? [{ description: plan.plan_name, qty: 1, rate: fee, amount: fee }] : [],
+          });
+          toast.success('Draft invoice auto-created');
+        }
+      } catch { /* silent fail for auto-invoice */ }
+    }
+    
     toast.success(`Moved to ${newStatus}`);
   };
 
