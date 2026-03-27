@@ -107,9 +107,62 @@ export default function PlanEditor() {
   const [assignStageName, setAssignStageName] = useState('');
   const lastSelectedContact = useRef<string | null>(null);
 
+  // Plan presets for selector
+  const [planPresets, setPlanPresets] = useState<{ id: string; name: string; fields: any[] }[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+
   useEffect(() => {
     if (!isNew && id) loadPlan(id);
-  }, [id]);
+    // Load plan presets
+    supabase.from('presets').select('id, name, fields').eq('category', 'plan_preset').order('name').then(({ data }) => {
+      setPlanPresets((data || []).map((d: any) => ({ ...d, fields: d.fields || [] })));
+    });
+    // If creating new plan from phase, try to auto-load preset from linked case request
+    if (isNew && phaseIdParam) {
+      autoLoadPresetFromPhase(phaseIdParam);
+    }
+  }, [id, phaseIdParam]);
+
+  const autoLoadPresetFromPhase = async (pId: string) => {
+    // Check if phase was created from a case request by finding a plan with case_request_id
+    const { data: existingPlans } = await supabase.from('treatment_plans').select('case_request_id, plan_name').eq('phase_id', pId).not('case_request_id', 'is', null).limit(1);
+    if (existingPlans && existingPlans.length > 0) {
+      const crId = existingPlans[0].case_request_id;
+      const { data: caseReq } = await supabase.from('case_requests').select('request_type').eq('id', crId).single();
+      if (caseReq) {
+        // Find the request type preset and its linked plan preset
+        const { data: allPresets } = await supabase.from('presets').select('id, name, description, category, fields').in('category', ['request_type', 'plan_preset']);
+        if (allPresets) {
+          const reqType = allPresets.find(p => p.category === 'request_type' && p.name === caseReq.request_type);
+          const linkedPresetId = reqType?.description;
+          if (linkedPresetId) {
+            const linkedPreset = allPresets.find(p => p.id === linkedPresetId);
+            if (linkedPreset) {
+              setPlanName(caseReq.request_type || 'Treatment Plan');
+              setSelectedPresetId(linkedPreset.id);
+              applyPresetSections(linkedPreset.fields as any[] || []);
+            }
+          }
+        }
+      }
+    }
+  };
+
+  const applyPresetSections = (fields: { label: string; type: string }[]) => {
+    fields.forEach(f => {
+      const item: SectionItem = { section_type: '', data_json: null, file_url: null, caption: f.label, sort_order: 0 };
+      switch (f.type) {
+        case 'ipr_data': item.section_type = 'ipr'; setIprSections(prev => [...prev, { ...item, sort_order: prev.length }]); setOpenSections(p => ({ ...p, ipr: true })); break;
+        case 'tooth_movement': item.section_type = 'movement'; setMovementSections(prev => [...prev, { ...item, sort_order: prev.length }]); setOpenSections(p => ({ ...p, movement: true })); break;
+        case 'feasibility': item.section_type = 'feasibility'; setFeasibilitySections(prev => [...prev, { ...item, data_json: {}, sort_order: prev.length }]); setOpenSections(p => ({ ...p, feasibility: true })); break;
+        case 'images': item.section_type = 'image'; setImageSections(prev => [...prev, { ...item, sort_order: prev.length }]); setOpenSections(p => ({ ...p, images: true })); break;
+        case 'video': item.section_type = 'video'; setVideoSections(prev => [...prev, { ...item, sort_order: prev.length }]); setOpenSections(p => ({ ...p, videos: true })); break;
+        case 'audio': item.section_type = 'audio'; setAudioSections(prev => [...prev, { ...item, sort_order: prev.length }]); setOpenSections(p => ({ ...p, audio: true })); break;
+        case 'model_analysis': item.section_type = 'model_analysis'; setModelSections(prev => [...prev, { ...item, sort_order: prev.length }]); setOpenSections(p => ({ ...p, model: true })); break;
+        case 'cephalometric': item.section_type = 'cephalometric'; setCephSections(prev => [...prev, { ...item, sort_order: prev.length }]); setOpenSections(p => ({ ...p, ceph: true })); break;
+      }
+    });
+  };
 
   const toggleSection = (key: string) => {
     setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
