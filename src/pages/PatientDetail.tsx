@@ -293,10 +293,10 @@ export default function PatientDetail() {
       });
     });
     setAssets([...(assetData || []), ...caseReqAssets]);
-    // Activity timeline: use local planData, not stale state
-    const localPlans = plans; // fallback reference
+    // Activity timeline: use hoisted fetchedPlanData/fetchedRemarkData
     const phaseIds2 = (phaseData || []).map((ph: any) => ph.id);
-    const localPlanIds = (planData || localPlans || []).map((pl: any) => pl.id);
+    const localPlanIds = fetchedPlanData.map((pl: any) => pl.id);
+    const allTargetIds = [patientId, ...phaseIds2, ...localPlanIds];
     const allTargetIds = [patientId, ...phaseIds2, ...localPlanIds];
 
     if (isAdmin) {
