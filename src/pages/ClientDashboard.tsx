@@ -523,7 +523,7 @@ export default function ClientDashboard() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
                         <Badge variant="secondary" className="text-xs">{p.phases.length} phase{p.phases.length !== 1 ? 's' : ''}</Badge>
-                        <Badge className={statusColor(p.latestStatus)} variant="secondary" className2="text-xs">{p.latestStatus}</Badge>
+                        <Badge className={statusColor(p.latestStatus)} variant="secondary">{p.latestStatus}</Badge>
                       </div>
                       {p.share_token && (
                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={e => { e.stopPropagation(); copyLink(p.share_token!, 'journey', e); }} title="Copy journey link">
