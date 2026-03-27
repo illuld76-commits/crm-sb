@@ -67,6 +67,7 @@ export default function GlobalKanban() {
   const [filterDoctor, setFilterDoctor] = useState('all');
 
   useEffect(() => {
+    if (scopeLoading) return;
     const fetchData = async () => {
       const [{ data: patients }, { data: phases }, { data: planData }, { data: cases }, { data: remarkCounts }] = await Promise.all([
         supabase.from('patients').select('id, patient_name, doctor_name').is('archived_at', null),
@@ -108,7 +109,7 @@ export default function GlobalKanban() {
       setLoading(false);
     };
     fetchData();
-  }, []);
+  }, [scopeLoading, isAdmin]);
 
   const uniqueDoctors = useMemo(() => [...new Set(plans.map(p => p.doctor_name).filter(Boolean))] as string[], [plans]);
 
