@@ -1,112 +1,154 @@
 
 
-# Holistic Enhancement Plan — Tooth Chart, Navigation, Billing Integration & CRM
+# Holistic Relational Workflow Overhaul
+
+This plan rethinks the core data flow: **Case Request → Project (Patient) → Phase (from request name) → Plan (from request type + preset) → Billing → Payments**, with proper relational navigation, RBAC, and archives throughout.
 
 ---
 
-## 1. Tooth Chart Improvements
+## Core Terminology Shift
 
-**Files:** `src/components/ToothChartSelector.tsx`
-
-- Add **deciduous dentition** (primary teeth: 55-51, 61-65 upper; 85-81, 71-75 lower) as a toggle section below permanent teeth, same arch layout
-- Make SVG **responsive** with proper viewBox scaling for mobile (use `w-full` container, reduce viewBox width on small screens)
-- Add **Shift+Click range selection**: track `lastClickedTooth`, on shift+click select all teeth between last and current in same arch
-- Improve readability: larger tooth labels, better spacing, color contrast
-- Add **form preview mode** in PresetForms: when building a work order form with `tooth_chart` field, show a read-only rendered preview of the form
+- **"Patient"** is renamed to **"Project"** in navigation/UI labels (DB table stays `patients`)
+- **"Cases and Projects"** becomes the single mega-button in the sidebar
+- Expands to 3 sub-buttons: **New Case Request**, **Case Requests**, **Projects**
+- Each sub-button opens a slidable pane with live search + scrollable list
 
 ---
 
-## 2. Patient Search Dropdown Fix
+## 1. Sidebar Navigation Overhaul
 
-**Files:** `src/pages/CaseSubmission.tsx`, `src/pages/Billing.tsx`
+**File:** `src/components/Sidebar.tsx`
 
-- The dropdown results div exists (lines 483-492) but needs better UX: add `max-h-48 overflow-y-auto` and ensure it shows on focus even when results exist
-- Show dropdown immediately when input is focused if there are cached results
-- Add a "No results found" state when search returns empty with 2+ chars
-
----
-
-## 3. Case Request → Plan/Phase Auto-Creation
-
-**Files:** `src/pages/CaseSubmission.tsx`
-
-- When a case request is accepted and linked to a patient, the `updateStatus('accepted')` creates a patient + initial phase but **no plan**
-- Fix: After creating the phase, also create a treatment plan using the linked plan preset (from request type's `discount_value` field which stores plan preset ID)
-- If no plan preset linked, create a default plan with the request type name
+- Remove the long flat list of nav links. Keep only essential top-level: Dashboard, Kanban, Messages, Notifications, Profile, Billing, Global Assets, Activity Logs
+- Admin-only: Team, Settings, Archives, Presets, Notif. Templates
+- Replace the bottom "Cases" section with a **"Cases & Projects"** expandable button
+- When clicked, shows 3 sub-items:
+  - **New Case Request** → navigates to `/case-submission`
+  - **Case Requests** → opens a slide-out pane (or inline expandable) with live search + scrollable list of case requests with status dots
+  - **Projects** → opens a slide-out pane with live search + scrollable list of patients with expandable phase → plan tree
+- Each pane: `max-h` with scroll, live search input at top, items are clickable links
 
 ---
 
-## 4. Plan Preset Linking in Request Types
+## 2. Case Request → Project/Phase/Plan Auto-Creation Fix
 
-**Files:** `src/pages/PresetForms.tsx`
+**File:** `src/pages/CaseSubmission.tsx`
 
-- The "Linked Work Order Form" and "Linked Plan Preset" dropdowns exist (lines 454-474) but the `discount_value` is used to store the plan preset ID as a number — it needs to store the UUID string
-- Fix: Store linked IDs in the `fields` JSON array or use `description` field for plan preset ID, keeping `unit` for work order ID
-- Show the orthodontic plan preset that was created — ensure plan presets with `category: 'plan_preset'` appear in the dropdown
-- Add ability to add **any treatment plan type** (not just orthodontic) — the plan preset system already supports this, just needs better UX
+**Problem:** Accepting a case request creates a patient + "Initial Treatment" phase but the plan doesn't reliably appear, and linking to existing patients doesn't create proper phases/plans.
 
----
+**Fix the `updateStatus('accepted')` flow:**
 
-## 5. Sidebar Navigation Restructure
+### For NEW patient (no existing link):
+1. Create patient record
+2. Create phase with `phase_name = case request name` (not "Initial Treatment")
+3. Create plan with `plan_name = request type name`, linked to the plan preset from the request type
+4. Store `case_request_id` on the plan for traceability
 
-**Files:** `src/components/Sidebar.tsx`
+### For EXISTING patient (linked via search):
+1. Create new phase under existing patient with `phase_name = case request name`
+2. Create plan with `plan_name = request type name` using linked preset
+3. Update case request with `patient_id`
 
-- Restructure the bottom section into a **"Cases" mega-section** that expands to show two sub-sections:
-  - **Case Requests** (with count badge, expandable list with status dots)
-  - **Cases** (patient list with phase/plan tree)
-- Add a dedicated "Case Requests" quick-link button in the top nav links
-- Add `max-h` with scroll for long lists to prevent overflow
-- Truncate long names with `truncate` class (already done for most)
-
----
-
-## 6. Quick Navigation Header Dropdown
-
-**Files:** `src/components/Header.tsx`
-
-- Add a **searchable dropdown** in the header (next to title) for quick navigation
-- When on a patient/case page, shows dropdown with all accessible cases, phases, plans
-- Live search filters the list
-- Clicking navigates to that entity without leaving current view context
+### Auto-populate demographics for existing patient:
+- When user selects existing patient in `selectExistingPatient()`, also fetch and fill `patient_age`, `patient_sex` from the patient record (currently only fills name/doctor/clinic)
 
 ---
 
-## 7. Billing ↔ Work Order/Phase Integration
+## 3. Plan Preset Visibility Fix
 
-**Files:** `src/pages/Billing.tsx`
+**File:** `src/pages/PresetForms.tsx`
 
-- When patient is selected, fetch their phases and plans
-- Add phase/plan selector dropdown
-- Auto-populate line items from linked case request's request type + fees from presets
-- Add "Add from Presets" button that shows fee/item presets for quick insertion (like SuiteDash-style item picker)
-- Show existing preset items in a searchable dropdown to avoid billing errors
+**Problem:** Orthodontic plan preset not visible; "Linked Work Order Type" field is a text input instead of a dropdown.
 
----
-
-## 8. Quick-Add Sections Saveable as Templates
-
-**Files:** `src/pages/PlanEditor.tsx`
-
-- Add "Save as Template" button in PlanEditor that saves current section configuration as a new plan preset
-- Links back to PresetForms for management
+**Fixes:**
+- Change "Linked Work Order Type" from `<Input>` to a `<Select>` dropdown populated with `presets.filter(p => p.category === 'work_order')`
+- Store the selected work order preset ID in the `unit` field (consistent with request types)
+- On page load, ensure existing plan presets (including any previously saved orthodontic plan) appear in the list
+- Show a default "Orthodontic Plan" entry if none exists (seed on first load or show a "Create Default" button)
 
 ---
 
-## Implementation Priority
+## 4. Plan Editor — Load Preset by Request Type
 
-1. Tooth chart (deciduous + mobile + shift-select + preview)
-2. Patient search dropdown fix
-3. Case request → auto-create plan on accept
-4. Plan preset linking fix in request types
-5. Sidebar restructure
-6. Header quick navigation
-7. Billing preset item integration
-8. Save sections as template
+**File:** `src/pages/PlanEditor.tsx`
+
+- When creating a new plan (via `?phaseId=`), check if the phase was created from a case request
+- If so, look up the request type's linked plan preset and pre-populate sections from it
+- Admin can change the preset via a dropdown at the top of the editor
+- Plan name defaults to request type name but is editable
+
+---
+
+## 5. Billing Auto-Population from Case/Plan
+
+**File:** `src/pages/Billing.tsx`
+
+- When patient is selected and phase/plan chosen, look up linked case request via `case_request_id` on the plan
+- Auto-populate line items from: request type name as description, fee from preset, qty from case request
+- All fields remain editable for admin
+- Add "Add from Presets" picker (already partially exists) — ensure it shows fee/item presets in a searchable dropdown
+
+---
+
+## 6. Archives Completeness Audit
+
+**Files:** `src/pages/AdminArchives.tsx` + audit all delete actions
+
+- Audit every `.delete()` call across the app and convert to `.update({ is_deleted: true })` where `is_deleted` column exists
+- In AdminArchives, query all tables with `is_deleted = true`: `case_requests`, `treatment_plans`, `phases`, `invoices`, `presets`, `communications`
+- Add tabs/filters for each entity type
+- Each item shows: restore button, permanent delete button
+
+---
+
+## 7. Remarks/Chat Attachment Integration
+
+**Files:** `src/components/CommunicationHub.tsx`, `src/pages/PlanEditor.tsx` (remarks section)
+
+- Ensure file attachment upload exists on both plan remarks and chat messages
+- When a case request is linked to a patient, its attachments should appear in the patient's Assets tab
+- All uploaded files across case requests, remarks, and chat should be queryable from the patient's asset hub
+
+---
+
+## 8. Relational Navigation Verification
+
+**Files:** Multiple pages
+
+- In `Dashboard.tsx`: case cards link to patient detail; plan badges link to plan editor; case request badges link to case detail
+- In `GlobalKanban.tsx`: cards link to plan editor and patient detail
+- In `Billing.tsx`/`BillingList.tsx`: invoice rows link to patient and plan
+- In `CaseSubmission.tsx`: "View linked patient" already exists; add "View linked plan" and "View linked phase" buttons
+- In `PatientDetail.tsx`: phases show linked case request badge with link back
+
+---
+
+## 9. RBAC Consistency
+
+- Non-admin users see only their RBAC-accessible projects in sidebar, Kanban, billing, activity logs, and notifications
+- `GlobalKanban.tsx` already filters — verify it works
+- `AuditLogs.tsx`: filter by user's accessible patient IDs for non-admin
+- `Notifications.tsx`: already user-scoped
+
+---
+
+## Implementation Order
+
+1. **Sidebar overhaul** (navigation UX, most visible)
+2. **Case request → project/phase/plan fix** (core workflow)
+3. **Auto-populate demographics for existing patient**
+4. **Plan preset visibility + linked work order dropdown fix**
+5. **Plan editor preset loading**
+6. **Billing auto-population**
+7. **Archives audit + soft-delete fixes**
+8. **Remarks attachments**
+9. **Relational navigation links**
+10. **RBAC consistency check**
 
 ## Technical Notes
 
-- ~8 files modified, no new files needed
-- No DB migrations — all data fits in existing JSON columns
-- Backward compatible with existing presets and case requests
-- The `discount_value` field hack for storing plan preset ID should be replaced with proper storage in `fields` JSON
+- ~8 files modified, 0 new files
+- No DB migrations needed — uses existing columns (`is_deleted`, `dynamic_data`, `case_request_id`, etc.)
+- Terminology change is UI-only (labels), no DB schema changes
+- Backward compatible with existing data
 
