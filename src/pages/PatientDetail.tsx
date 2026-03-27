@@ -598,7 +598,7 @@ export default function PatientDetail() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 mb-6">
+          <TabsList className="grid w-full grid-cols-3 md:grid-cols-6 mb-6">
             <TabsTrigger value="workbench" className="gap-1.5 text-xs sm:text-sm">
               <FileText className="w-3 h-3 sm:w-4 sm:h-4" /> Workbench
             </TabsTrigger>
@@ -607,6 +607,9 @@ export default function PatientDetail() {
             </TabsTrigger>
             <TabsTrigger value="communication" className="gap-1.5 text-xs sm:text-sm">
               <MessageSquare className="w-3 h-3 sm:w-4 sm:h-4" /> Chat
+            </TabsTrigger>
+            <TabsTrigger value="tasks" className="gap-1.5 text-xs sm:text-sm">
+              <Briefcase className="w-3 h-3 sm:w-4 sm:h-4" /> Tasks
             </TabsTrigger>
             <TabsTrigger value="timeline" className="gap-1.5 text-xs sm:text-sm">
               <History className="w-3 h-3 sm:w-4 sm:h-4" /> Timeline
