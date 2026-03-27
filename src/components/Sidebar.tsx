@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Search, ChevronRight, PanelLeftClose, PanelLeftOpen, LayoutGrid, X, FilePlus, Archive, Settings as SettingsIcon, Bell, User, History, CreditCard, UserCog, Columns3, LogOut, MessageSquare, FolderOpen } from 'lucide-react';
+import { Search, ChevronRight, PanelLeftClose, PanelLeftOpen, LayoutGrid, X, FilePlus, Archive, Settings as SettingsIcon, Bell, User, History, CreditCard, UserCog, Columns3, LogOut, MessageSquare, FolderOpen, Inbox } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
@@ -87,7 +87,8 @@ export default function Sidebar({ patients, phases, plans, caseRequests, onClose
           {[
             { to: '/', icon: LayoutGrid, label: 'Dashboard', show: true },
             { to: '/kanban', icon: Columns3, label: 'Kanban Board', show: true },
-            { to: '/case-submission', icon: FilePlus, label: 'New Case Request', show: true },
+            { to: '/submitted-cases', icon: Inbox, label: 'Case Requests', show: true },
+            { to: '/case-submission', icon: FilePlus, label: 'New Case', show: true },
             { to: '/messages', icon: MessageSquare, label: 'Messages', show: true },
             { to: '/notifications', icon: Bell, label: 'Notifications', show: true },
             { to: '/profile', icon: User, label: 'My Profile', show: true },
@@ -116,32 +117,97 @@ export default function Sidebar({ patients, phases, plans, caseRequests, onClose
       </div>
 
       <ScrollArea className="flex-1 p-3">
-        {/* Case Requests Section */}
-        <div className="mb-4">
+        {/* Cases Mega-Section */}
+        <div className="mb-2">
           <div className="flex items-center justify-between mb-2">
-            <Link to="/submitted-cases" onClick={onClose} className="font-semibold text-xs text-muted-foreground uppercase tracking-wider hover:text-primary">
-              Case Requests ({filteredCaseRequests.length})
-            </Link>
-            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setIsCasesExpanded(!isCasesExpanded)}>
-              <ChevronRight className={`h-3 w-3 transition-transform ${isCasesExpanded ? 'rotate-90' : ''}`} />
-            </Button>
+            <span className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">Cases</span>
           </div>
-          {isCasesExpanded && (
-            <div className="space-y-1 max-h-40 overflow-y-auto">
-              {filteredCaseRequests.map(req => (
-                <Link
-                  key={req.id}
-                  to={req.status === 'accepted' && req.patient_id ? `/patient/${req.patient_id}` : `/case-submission/${req.id}`}
-                  onClick={onClose}
-                  className="flex items-center gap-2 p-1.5 rounded-md hover:bg-muted text-xs"
-                >
-                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${req.status === 'pending' ? 'bg-orange-500' : req.status === 'accepted' ? 'bg-green-500' : 'bg-blue-500'}`} />
-                  <span className="truncate">{req.patient_name}</span>
-                </Link>
-              ))}
-              {filteredCaseRequests.length === 0 && <div className="text-xs text-muted-foreground py-1">No case requests</div>}
+
+          {/* Case Requests Sub-Section */}
+          <div className="mb-3">
+            <div className="flex items-center justify-between mb-1">
+              <Link to="/submitted-cases" onClick={onClose} className="text-xs font-medium text-muted-foreground hover:text-primary flex items-center gap-1">
+                <Inbox className="h-3 w-3" /> Requests ({filteredCaseRequests.length})
+              </Link>
+              <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setIsCasesExpanded(!isCasesExpanded)}>
+                <ChevronRight className={`h-3 w-3 transition-transform ${isCasesExpanded ? 'rotate-90' : ''}`} />
+              </Button>
             </div>
-          )}
+            {isCasesExpanded && (
+              <div className="space-y-0.5 max-h-32 overflow-y-auto ml-1 border-l border-border/50 pl-2">
+                {filteredCaseRequests.map(req => (
+                  <Link
+                    key={req.id}
+                    to={`/case-submission/${req.id}`}
+                    onClick={onClose}
+                    className="flex items-center gap-2 p-1 rounded-md hover:bg-muted text-xs"
+                  >
+                    <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${req.status === 'pending' ? 'bg-orange-500' : req.status === 'accepted' ? 'bg-green-500' : req.status === 'completed' ? 'bg-primary' : 'bg-muted-foreground'}`} />
+                    <span className="truncate">{req.patient_name}</span>
+                    <span className="text-[9px] text-muted-foreground ml-auto shrink-0">{req.status}</span>
+                  </Link>
+                ))}
+                {filteredCaseRequests.length === 0 && <div className="text-xs text-muted-foreground py-1">No requests</div>}
+              </div>
+            )}
+          </div>
+
+          {/* Patient Cases Sub-Section */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium text-muted-foreground">Patients ({filteredPatients.length})</span>
+              <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setIsPatientsExpanded(!isPatientsExpanded)}>
+                <ChevronRight className={`h-3 w-3 transition-transform ${isPatientsExpanded ? 'rotate-90' : ''}`} />
+              </Button>
+            </div>
+            {isPatientsExpanded && (
+              <>
+                <div className="relative mb-2">
+                  <Search className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
+                  <Input placeholder="Search..." className="pl-7 h-7 text-xs" value={search} onChange={e => setSearch(e.target.value)} />
+                </div>
+                <div className="space-y-0.5 max-h-[calc(100vh-500px)] overflow-y-auto">
+                  {filteredPatients.map(p => {
+                    const patientPhases = phases.filter(ph => ph.patient_id === p.id);
+                    return (
+                      <div key={p.id}>
+                        <div className="flex items-center gap-1">
+                          {patientPhases.length > 0 && (
+                            <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={e => { e.preventDefault(); setExpandedPatients(prev => ({ ...prev, [p.id]: !prev[p.id] })); }}>
+                              <ChevronRight className={`h-3 w-3 transition-transform ${expandedPatients[p.id] ? 'rotate-90' : ''}`} />
+                            </Button>
+                          )}
+                          <Link to={`/patient/${p.id}`} onClick={onClose} className="flex-1 truncate text-xs p-1.5 rounded hover:bg-muted">{p.patient_name}</Link>
+                        </div>
+                        {expandedPatients[p.id] && patientPhases.map(ph => {
+                          const phasePlans = plans.filter(pl => pl.phase_id === ph.id);
+                          return (
+                            <div key={ph.id} className="ml-6">
+                              <div className="flex items-center gap-1">
+                                {phasePlans.length > 0 && (
+                                  <Button variant="ghost" size="icon" className="h-4 w-4 shrink-0" onClick={e => { e.preventDefault(); setExpandedPhases(prev => ({ ...prev, [ph.id]: !prev[ph.id] })); }}>
+                                    <ChevronRight className={`h-2 w-2 transition-transform ${expandedPhases[ph.id] ? 'rotate-90' : ''}`} />
+                                  </Button>
+                                )}
+                                <span className="text-[10px] text-muted-foreground truncate p-1">{ph.phase_name}</span>
+                              </div>
+                              {expandedPhases[ph.id] && phasePlans.map(pl => (
+                                <Link key={pl.id} to={`/plan/${pl.id}`} onClick={onClose} className="ml-4 block text-[10px] text-muted-foreground p-1 rounded hover:bg-muted truncate">
+                                  {pl.plan_name}
+                                </Link>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </ScrollArea>
         </div>
 
         {/* Cases Section */}
