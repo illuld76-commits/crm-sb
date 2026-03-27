@@ -50,6 +50,7 @@ const App = () => (
                 <RelationalPreviewDrawer />
                 <Routes>
                   <Route path="/auth" element={<Auth />} />
+                  <Route path="/admin-activate" element={<AdminActivate />} />
                   <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                     <Route index element={<Index />} />
                     <Route path="patient/:id" element={<PatientDetail />} />
