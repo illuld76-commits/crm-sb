@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
+import { useUserScope } from '@/hooks/useUserScope';
 import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,7 @@ export default function CaseSubmission() {
   const { id } = useParams();
   const { user } = useAuth();
   const { isAdmin } = useRole();
+  const { allowedClinics, allowedDoctors, allowedLabs, canAccessPatient, filterEntities, loading: scopeLoading } = useUserScope();
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [presets, setPresets] = useState<Preset[]>([]);
@@ -61,6 +63,17 @@ export default function CaseSubmission() {
       setSettingsEntities(data || []);
     });
 
+    // Auto-fill for single-assignment non-admin users
+    if (!isAdmin && allowedClinics && allowedClinics.length === 1 && !id) {
+      setFormData(prev => ({ ...prev, clinic_name: allowedClinics[0] }));
+    }
+    if (!isAdmin && allowedDoctors && allowedDoctors.length === 1 && !id) {
+      setFormData(prev => ({ ...prev, doctor_name: allowedDoctors[0] }));
+    }
+    if (!isAdmin && allowedLabs && allowedLabs.length === 1 && !id) {
+      setFormData(prev => ({ ...prev, lab_name: allowedLabs[0] }));
+    }
+
     if (id) {
       supabase.from('case_requests').select('*').eq('id', id).single().then(({ data }) => {
         if (data) {
@@ -82,16 +95,17 @@ export default function CaseSubmission() {
     }
   }, [id]);
 
-  // Patient search
+  // Patient search (RBAC-scoped)
   useEffect(() => {
     if (patientSearch.length < 2) { setPatientResults([]); return; }
-    const t = setTimeout(() => {
-      supabase.from('patients').select('id, patient_name, doctor_name, clinic_name')
-        .ilike('patient_name', `%${patientSearch}%`).limit(5)
-        .then(({ data }) => setPatientResults(data || []));
+    const t = setTimeout(async () => {
+      const { data } = await supabase.from('patients').select('id, patient_name, doctor_name, clinic_name, lab_name, company_name, user_id, primary_user_id, secondary_user_id')
+        .ilike('patient_name', `%${patientSearch}%`).limit(20);
+      const results = (data || []).filter(p => canAccessPatient(p));
+      setPatientResults(results.slice(0, 5));
     }, 300);
     return () => clearTimeout(t);
-  }, [patientSearch]);
+  }, [patientSearch, canAccessPatient]);
 
   const selectExistingPatient = async (p: typeof patientResults[0]) => {
     setSelectedPatientId(p.id);
@@ -295,9 +309,15 @@ export default function CaseSubmission() {
     return map[s] || 'bg-muted text-muted-foreground';
   };
 
-  const doctorEntities = settingsEntities.filter(e => e.entity_type === 'doctor');
-  const clinicEntities = settingsEntities.filter(e => e.entity_type === 'clinic');
-  const labEntities = settingsEntities.filter(e => e.entity_type === 'lab');
+  const doctorEntities = filterEntities(settingsEntities, 'doctor').length > 0
+    ? filterEntities(settingsEntities, 'doctor')
+    : (isAdmin ? settingsEntities.filter(e => e.entity_type === 'doctor') : []);
+  const clinicEntities = filterEntities(settingsEntities, 'clinic').length > 0
+    ? filterEntities(settingsEntities, 'clinic')
+    : (isAdmin ? settingsEntities.filter(e => e.entity_type === 'clinic') : []);
+  const labEntities = filterEntities(settingsEntities, 'lab').length > 0
+    ? filterEntities(settingsEntities, 'lab')
+    : (isAdmin ? settingsEntities.filter(e => e.entity_type === 'lab') : []);
 
   // ─── VIEW MODE (submitted case detail) ───
   if (isViewMode && caseData) {
