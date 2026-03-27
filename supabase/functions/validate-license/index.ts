@@ -47,30 +47,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    // The license generator produces base64(JSON({ email, issued_at, signature }))
-    // where signature = HMAC-SHA256(email + issued_at, secret)
-    const secret = Deno.env.get("ADMIN_LICENSE_SECRET") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    // Validate HMAC token
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const secret = Deno.env.get("ADMIN_LICENSE_SECRET") || serviceKey;
+
     const encoder = new TextEncoder();
-
-    let tokenData: { email: string; issued_at: string; signature: string };
-    try {
-      tokenData = JSON.parse(atob(license_token.trim()));
-    } catch {
-      return new Response(JSON.stringify({ error: "Invalid license token format" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Verify email matches
-    if (tokenData.email !== userEmail) {
-      return new Response(JSON.stringify({ error: "License token email does not match your account" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Verify HMAC signature
     const key = await crypto.subtle.importKey(
       "raw",
       encoder.encode(secret),
@@ -78,24 +59,25 @@ Deno.serve(async (req) => {
       false,
       ["sign"]
     );
-    const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(tokenData.email + tokenData.issued_at));
-    const expectedSig = Array.from(new Uint8Array(sig))
+    const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(userEmail));
+    const expectedToken = Array.from(new Uint8Array(sig))
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
 
-    if (tokenData.signature !== expectedSig) {
+    if (license_token.trim().toLowerCase() !== expectedToken.toLowerCase()) {
       return new Response(JSON.stringify({ error: "Invalid license token" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Upsert admin role using service role
+    // Upsert admin role
     const adminClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    // Delete existing role if any, then insert admin
     await adminClient.from("user_roles").delete().eq("user_id", userId);
     await adminClient.from("user_roles").insert({ user_id: userId, role: "admin" });
 

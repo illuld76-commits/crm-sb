@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,16 +15,8 @@ export default function Auth() {
   const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<'signin' | 'signup'>('signin');
-  const { signIn, signUp, user, loading: authLoading } = useAuth();
+  const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const redirectTo = searchParams.get('redirect') || '/';
-
-  useEffect(() => {
-    if (!authLoading && user) {
-      navigate(redirectTo, { replace: true });
-    }
-  }, [authLoading, navigate, redirectTo, user]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +25,7 @@ export default function Auth() {
     if (error) {
       toast.error(error.message);
     } else {
-      navigate(redirectTo, { replace: true });
+      navigate('/');
     }
     setLoading(false);
   };
@@ -42,17 +34,12 @@ export default function Auth() {
     e.preventDefault();
     if (password.length < 6) { toast.error('Password must be at least 6 characters'); return; }
     setLoading(true);
-    const { error, needsEmailConfirmation } = await signUp(email, password, displayName || undefined);
+    const { error } = await signUp(email, password, displayName || undefined);
     if (error) {
       toast.error(error.message);
     } else {
-      if (needsEmailConfirmation) {
-        toast.success('Account created. Check your email, verify it, then sign in.');
-        setTab('signin');
-      } else {
-        toast.success('Account created and signed in.');
-        navigate(redirectTo, { replace: true });
-      }
+      toast.success('Account created! You can now sign in.');
+      setTab('signin');
     }
     setLoading(false);
   };
