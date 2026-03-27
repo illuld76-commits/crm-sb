@@ -146,17 +146,30 @@ export default function CaseSubmission() {
       for (const file of files) {
         const path = `${user.id}/case-requests/${Date.now()}_${file.name}`;
         const { error: uploadError } = await supabase.storage.from('case-files').upload(path, file);
-        if (!uploadError) {
-          const { data: urlData } = supabase.storage.from('case-files').getPublicUrl(path);
-          attachments.push({ name: file.name, url: urlData.publicUrl, type: file.type, size: file.size });
+        if (uploadError) {
+          toast.error(`Upload failed: ${file.name}`);
+          setIsSubmitting(false);
+          return;
         }
+        const { data: urlData } = supabase.storage.from('case-files').getPublicUrl(path);
+        attachments.push({ name: file.name, url: urlData.publicUrl, type: file.type, size: file.size });
       }
+
+      // Build request_items from selectedRequestTypes
+      const requestItems = selectedRequestTypes.map(rt => ({
+        request_type: rt.name,
+        qty: rt.qty,
+        rate: rt.fee,
+        preset_id: rt.presetId,
+      }));
 
       const payload: any = {
         patient_name: formData.patient_name,
         patient_age: formData.patient_age ? parseInt(formData.patient_age) : null,
         patient_sex: formData.patient_sex,
         request_type: formData.request_type,
+        request_name: formData.request_name || formData.patient_name,
+        request_items: requestItems.length > 0 ? requestItems : null,
         notes: formData.notes,
         attachments: attachments as any,
         status: isSubmitted ? 'pending' : 'draft',
@@ -172,10 +185,20 @@ export default function CaseSubmission() {
         } as any,
       };
 
+      let saveError: any = null;
       if (id) {
-        await supabase.from('case_requests').update(payload).eq('id', id);
+        const { error } = await supabase.from('case_requests').update(payload).eq('id', id);
+        saveError = error;
       } else {
-        await supabase.from('case_requests').insert(payload);
+        const { error } = await supabase.from('case_requests').insert(payload);
+        saveError = error;
+      }
+
+      if (saveError) {
+        toast.error('Failed to save case request');
+        console.error('Save error:', saveError);
+        setIsSubmitting(false);
+        return;
       }
 
       if (isSubmitted) {
@@ -191,6 +214,7 @@ export default function CaseSubmission() {
       navigate('/submitted-cases');
     } catch (error) {
       toast.error('Failed to submit case');
+      console.error(error);
     } finally { setIsSubmitting(false); }
   };
 
