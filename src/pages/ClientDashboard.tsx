@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
+import { useUserScope } from '@/hooks/useUserScope';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -43,6 +44,7 @@ interface PlanRow {
 export default function ClientDashboard() {
   const { user } = useAuth();
   const { expired, expiresAt, role } = useRole();
+  const { canAccessPatient } = useUserScope();
   const navigate = useNavigate();
   const [patients, setPatients] = useState<PatientRow[]>([]);
   const [plans, setPlans] = useState<PlanRow[]>([]);
@@ -62,7 +64,9 @@ export default function ClientDashboard() {
       .is('archived_at', null)
       .order('created_at', { ascending: false });
 
-    setPatients(patientData || []);
+    // RBAC: filter to only patients the user can access
+    const scopedPatients = (patientData || []).filter(p => canAccessPatient(p));
+    setPatients(scopedPatients);
 
     if (patientData && patientData.length > 0) {
       const patientIds = patientData.map(p => p.id);

@@ -56,7 +56,7 @@ const App = () => (
                     <Route path="plan/:id" element={<ProtectedRoute requireAdmin><PlanEditor /></ProtectedRoute>} />
                     <Route path="team" element={<ProtectedRoute requireAdmin><TeamManagement /></ProtectedRoute>} />
                     <Route path="kanban" element={<GlobalKanban />} />
-                    <Route path="audit-logs" element={<AuditLogs />} />
+                    <Route path="audit-logs" element={<ProtectedRoute requireAdmin><AuditLogs /></ProtectedRoute>} />
                     <Route path="settings" element={<ProtectedRoute requireAdmin><Settings /></ProtectedRoute>} />
                     <Route path="preset-forms" element={<ProtectedRoute requireAdmin><PresetForms /></ProtectedRoute>} />
                     <Route path="case-submission" element={<CaseSubmission />} />

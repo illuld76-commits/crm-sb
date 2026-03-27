@@ -16,6 +16,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { ArrowLeft, Printer, Save, Plus, Trash2, Receipt as ReceiptIcon, Loader2, Lock, DollarSign, AlertTriangle } from 'lucide-react';
+import { sendNotification } from '@/lib/notifications';
 import { Invoice, Receipt, Preset } from '@/types';
 import { format } from 'date-fns';
 import { useRelationalNav } from '@/hooks/useRelationalNav';
@@ -352,11 +353,29 @@ export default function Billing() {
         const { data, error } = await supabase.from('invoices').insert(payload).select('id').single();
         if (error) throw error;
         toast.success(finalStatus === 'sent' ? 'Invoice saved & published' : 'Invoice created');
+        // Notify patient owner when invoice is sent
+        if (finalStatus === 'sent' && primaryUserId && user && primaryUserId !== user.id) {
+          sendNotification({
+            userId: primaryUserId,
+            eventType: 'invoice_sent',
+            placeholders: { patient_name: patientName, invoice_number: invoiceNumber, invoice_amount: `${currencySymbol}${totals.grandTotal.toFixed(2)}` },
+            link: `/billing/${data.id}`,
+          });
+        }
         navigate(`/billing/${data.id}`);
       } else {
         const { error } = await supabase.from('invoices').update(payload).eq('id', invoiceId);
         if (error) throw error;
         setStatus(finalStatus);
+        // Notify on status change to 'sent'
+        if (finalStatus === 'sent' && status !== 'sent' && primaryUserId && user && primaryUserId !== user.id) {
+          sendNotification({
+            userId: primaryUserId,
+            eventType: 'invoice_sent',
+            placeholders: { patient_name: patientName, invoice_number: invoiceNumber, invoice_amount: `${currencySymbol}${totals.grandTotal.toFixed(2)}` },
+            link: `/billing/${invoiceId}`,
+          });
+        }
         toast.success(finalStatus === 'sent' ? 'Invoice updated & published' : 'Invoice saved');
       }
     } catch (e: any) {
@@ -391,6 +410,16 @@ export default function Billing() {
         balance_due: Math.max(newBalance, 0),
         is_locked: shouldLock,
       } as any).eq('id', invoiceId);
+
+      // Notify patient owner about payment
+      if (primaryUserId && user && primaryUserId !== user.id) {
+        sendNotification({
+          userId: primaryUserId,
+          eventType: 'payment_received',
+          placeholders: { patient_name: patientName, invoice_number: invoiceNumber, payment_amount: `${currencySymbol}${amount.toFixed(2)}`, balance_due: `${currencySymbol}${Math.max(newBalance, 0).toFixed(2)}` },
+          link: `/billing/${invoiceId}`,
+        });
+      }
 
       setShowReceiptForm(false);
       setReceiptAmount(''); setReceiptRef(''); setReceiptNotes('');
