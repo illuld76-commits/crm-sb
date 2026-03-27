@@ -132,6 +132,10 @@ export default function PresetForms() {
   const [dentalPanelOpen, setDentalPanelOpen] = useState(false);
   const [showFormPreview, setShowFormPreview] = useState(false);
   const [previewToothData, setPreviewToothData] = useState<ToothSelection[]>([]);
+  const [seeding, setSeeding] = useState(false);
+  const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
+  const [editLinkWo, setEditLinkWo] = useState('');
+  const [editLinkPlan, setEditLinkPlan] = useState('');
 
   // New preset form state
   const [newName, setNewName] = useState('');
@@ -163,6 +167,173 @@ export default function PresetForms() {
       setEmailTemplates((data || []) as EmailTemplate[]);
     });
   }, []);
+
+  const seedDefaults = async () => {
+    if (!user) return;
+    setSeeding(true);
+    try {
+      const uid = user.id;
+      const base = { type: 'case', user_id: uid, fee_usd: 0 };
+
+      // 1. Work Order Presets
+      const woPresets = [
+        { name: 'Standard Aligner', category: 'work_order', ...base, fields: [
+          { id: crypto.randomUUID(), label: 'Arch Selection', type: 'radio', options: ['Upper Only','Lower Only','Both Arches','As per plan'], required: true },
+          { id: crypto.randomUUID(), label: 'Aligner Steps', type: 'text', required: true },
+          { id: crypto.randomUUID(), label: 'Material / Thickness', type: 'dropdown', options: ['0.5mm Standard','0.75mm Medium','1.0mm Heavy','Smart Track equivalent'], required: true },
+          { id: crypto.randomUUID(), label: 'Tooth Chart', type: 'tooth_chart', required: false },
+          { id: crypto.randomUUID(), label: 'IPR Required', type: 'radio', options: ['Yes - as per plan','No','Custom'], required: false },
+          { id: crypto.randomUUID(), label: 'Attachments', type: 'checkbox', options: ['Conventional','Optimized','Precision Cut','Power Ridge','None'], required: false },
+          { id: crypto.randomUUID(), label: 'Special Instructions', type: 'textarea', required: false },
+        ] },
+        { name: 'Retainer', category: 'work_order', ...base, fields: [
+          { id: crypto.randomUUID(), label: 'Arch Selection', type: 'radio', options: ['Upper Only','Lower Only','Both Arches'], required: true },
+          { id: crypto.randomUUID(), label: 'Retainer Type', type: 'dropdown', options: ['Essix Clear','Hawley','Bonded Lingual','Vivera-type'], required: true },
+          { id: crypto.randomUUID(), label: 'Material', type: 'dropdown', options: ['1.0mm PET','0.75mm PET','Duran','Custom'], required: true },
+          { id: crypto.randomUUID(), label: 'Special Instructions', type: 'textarea', required: false },
+        ] },
+        { name: 'Crown / Bridge', category: 'work_order', ...base, fields: [
+          { id: crypto.randomUUID(), label: 'Tooth Chart', type: 'tooth_chart', required: true },
+          { id: crypto.randomUUID(), label: 'Restoration Type', type: 'dropdown', options: ['Single Crown','Bridge','Inlay','Onlay','Veneer'], required: true },
+          { id: crypto.randomUUID(), label: 'Material', type: 'dropdown', options: ['Zirconia','PFM','E-max','Full Gold','Composite'], required: true },
+          { id: crypto.randomUUID(), label: 'Shade', type: 'text', required: true },
+          { id: crypto.randomUUID(), label: 'Pontic Design', type: 'dropdown', options: ['Modified Ridge Lap','Ovate','Hygienic','Conical'], required: false },
+          { id: crypto.randomUUID(), label: 'Occlusion Notes', type: 'textarea', required: false },
+        ] },
+        { name: 'Implant Guide', category: 'work_order', ...base, fields: [
+          { id: crypto.randomUUID(), label: 'Tooth Chart', type: 'tooth_chart', required: true },
+          { id: crypto.randomUUID(), label: 'Implant System', type: 'text', required: true },
+          { id: crypto.randomUUID(), label: 'Guide Type', type: 'dropdown', options: ['Pilot Only','Full Guided','Stackable'], required: true },
+          { id: crypto.randomUUID(), label: 'Bone Graft Required', type: 'radio', options: ['Yes','No'], required: false },
+          { id: crypto.randomUUID(), label: 'Special Instructions', type: 'textarea', required: false },
+        ] },
+        { name: 'Splint', category: 'work_order', ...base, fields: [
+          { id: crypto.randomUUID(), label: 'Arch Selection', type: 'radio', options: ['Upper Only','Lower Only','Both Arches'], required: true },
+          { id: crypto.randomUUID(), label: 'Splint Type', type: 'dropdown', options: ['Night Guard','Occlusal Splint','TMJ Stabilization','Sports Guard'], required: true },
+          { id: crypto.randomUUID(), label: 'Material Thickness', type: 'dropdown', options: ['1.5mm','2.0mm','3.0mm','Custom'], required: true },
+          { id: crypto.randomUUID(), label: 'Special Instructions', type: 'textarea', required: false },
+        ] },
+        { name: 'Surgical Guide', category: 'work_order', ...base, fields: [
+          { id: crypto.randomUUID(), label: 'Tooth Chart', type: 'tooth_chart', required: true },
+          { id: crypto.randomUUID(), label: 'Surgery Type', type: 'dropdown', options: ['Extraction','Impaction','Bone Graft','Sinus Lift','Osteotomy'], required: true },
+          { id: crypto.randomUUID(), label: 'Guide Material', type: 'dropdown', options: ['Resin Printed','Metal Reinforced','Autoclavable'], required: true },
+          { id: crypto.randomUUID(), label: 'Special Instructions', type: 'textarea', required: false },
+        ] },
+      ];
+
+      const { data: woData } = await supabase.from('presets').insert(woPresets as any).select();
+      const woMap: Record<string, string> = {};
+      (woData || []).forEach((w: any) => { woMap[w.name] = w.id; });
+
+      // 2. Plan Presets
+      const planPresets = [
+        { name: 'Orthodontic Plan', category: 'plan_preset', ...base, unit: woMap['Standard Aligner'] || null, fields: [
+          { id: crypto.randomUUID(), label: 'IPR Data', type: 'ipr_data', required: false },
+          { id: crypto.randomUUID(), label: 'Tooth Movement', type: 'tooth_movement', required: false },
+          { id: crypto.randomUUID(), label: 'Feasibility', type: 'feasibility', required: false },
+          { id: crypto.randomUUID(), label: 'Images', type: 'images', required: false },
+          { id: crypto.randomUUID(), label: 'Model Analysis', type: 'model_analysis', required: false },
+          { id: crypto.randomUUID(), label: 'Cephalometric', type: 'cephalometric', required: false },
+          { id: crypto.randomUUID(), label: 'Audio', type: 'audio', required: false },
+          { id: crypto.randomUUID(), label: 'Video', type: 'video', required: false },
+          { id: crypto.randomUUID(), label: 'Notes', type: 'notes', required: false },
+        ] },
+        { name: 'Crown & Bridge Plan', category: 'plan_preset', ...base, unit: woMap['Crown / Bridge'] || null, fields: [
+          { id: crypto.randomUUID(), label: 'Images', type: 'images', required: false },
+          { id: crypto.randomUUID(), label: 'Feasibility', type: 'feasibility', required: false },
+          { id: crypto.randomUUID(), label: 'Notes', type: 'notes', required: false },
+        ] },
+        { name: 'Implant Plan', category: 'plan_preset', ...base, unit: woMap['Implant Guide'] || null, fields: [
+          { id: crypto.randomUUID(), label: 'Images', type: 'images', required: false },
+          { id: crypto.randomUUID(), label: 'Model Analysis', type: 'model_analysis', required: false },
+          { id: crypto.randomUUID(), label: 'Cephalometric', type: 'cephalometric', required: false },
+          { id: crypto.randomUUID(), label: 'Feasibility', type: 'feasibility', required: false },
+          { id: crypto.randomUUID(), label: 'Notes', type: 'notes', required: false },
+        ] },
+        { name: 'Surgical Plan', category: 'plan_preset', ...base, unit: woMap['Surgical Guide'] || null, fields: [
+          { id: crypto.randomUUID(), label: 'Images', type: 'images', required: false },
+          { id: crypto.randomUUID(), label: 'Video', type: 'video', required: false },
+          { id: crypto.randomUUID(), label: 'Feasibility', type: 'feasibility', required: false },
+          { id: crypto.randomUUID(), label: 'Notes', type: 'notes', required: false },
+        ] },
+        { name: 'Dental Lab Work Plan', category: 'plan_preset', ...base, fields: [
+          { id: crypto.randomUUID(), label: 'Images', type: 'images', required: false },
+          { id: crypto.randomUUID(), label: 'Model Analysis', type: 'model_analysis', required: false },
+          { id: crypto.randomUUID(), label: 'Feasibility', type: 'feasibility', required: false },
+          { id: crypto.randomUUID(), label: 'Notes', type: 'notes', required: false },
+        ] },
+        { name: 'General Restorative Plan', category: 'plan_preset', ...base, fields: [
+          { id: crypto.randomUUID(), label: 'Images', type: 'images', required: false },
+          { id: crypto.randomUUID(), label: 'Feasibility', type: 'feasibility', required: false },
+          { id: crypto.randomUUID(), label: 'Notes', type: 'notes', required: false },
+        ] },
+      ];
+
+      const { data: ppData } = await supabase.from('presets').insert(planPresets as any).select();
+      const ppMap: Record<string, string> = {};
+      (ppData || []).forEach((p: any) => { ppMap[p.name] = p.id; });
+
+      // 3. Request Types (linked to WO + Plan Preset)
+      const requestTypes = [
+        { name: 'Standard Aligner', category: 'request_type', ...base, fee_usd: 15000, unit: woMap['Standard Aligner'] || null, description: ppMap['Orthodontic Plan'] || null },
+        { name: 'Crown & Bridge', category: 'request_type', ...base, fee_usd: 8000, unit: woMap['Crown / Bridge'] || null, description: ppMap['Crown & Bridge Plan'] || null },
+        { name: 'Implant', category: 'request_type', ...base, fee_usd: 25000, unit: woMap['Implant Guide'] || null, description: ppMap['Implant Plan'] || null },
+        { name: 'Surgical', category: 'request_type', ...base, fee_usd: 20000, unit: woMap['Surgical Guide'] || null, description: ppMap['Surgical Plan'] || null },
+        { name: 'Retainer', category: 'request_type', ...base, fee_usd: 5000, unit: woMap['Retainer'] || null, description: ppMap['Orthodontic Plan'] || null },
+        { name: 'Splint / Night Guard', category: 'request_type', ...base, fee_usd: 6000, unit: woMap['Splint'] || null, description: ppMap['Dental Lab Work Plan'] || null },
+      ];
+
+      await supabase.from('presets').insert(requestTypes as any);
+
+      // 4. Fee/Item Presets
+      const feePresets = [
+        { name: 'Full Upper Aligner Package', category: 'fee', ...base, fee_usd: 12000, unit_price: 12000, unit: 'per arch' },
+        { name: 'Full Lower Aligner Package', category: 'fee', ...base, fee_usd: 12000, unit_price: 12000, unit: 'per arch' },
+        { name: 'Retainer Set', category: 'fee', ...base, fee_usd: 5000, unit_price: 5000, unit: 'per set' },
+        { name: 'Crown PFM', category: 'item', ...base, fee_usd: 3000, unit_price: 3000, unit: 'per tooth' },
+        { name: 'Crown Zirconia', category: 'item', ...base, fee_usd: 6000, unit_price: 6000, unit: 'per tooth' },
+        { name: 'Implant Guide', category: 'item', ...base, fee_usd: 8000, unit_price: 8000, unit: 'per guide' },
+        { name: 'Splint / Night Guard', category: 'item', ...base, fee_usd: 4000, unit_price: 4000, unit: 'per unit' },
+      ];
+
+      await supabase.from('presets').insert(feePresets as any);
+
+      // 5. Tax & Discount Presets
+      const taxPresets = [
+        { name: 'GST 18% (Cosmetic)', category: 'tax', ...base, tax_rate: 18 },
+        { name: 'GST 5% (Prosthetics)', category: 'tax', ...base, tax_rate: 5 },
+        { name: 'GST 0% (Basic Dental)', category: 'tax', ...base, tax_rate: 0 },
+      ];
+      const discountPresets = [
+        { name: 'Loyalty Discount 10%', category: 'discount', ...base, discount_type: 'percentage', discount_value: 10 },
+        { name: 'Referral Discount 5%', category: 'discount', ...base, discount_type: 'percentage', discount_value: 5 },
+        { name: 'Flat ₹500 Off', category: 'discount', ...base, discount_type: 'fixed', discount_value: 500 },
+      ];
+
+      await Promise.all([
+        supabase.from('presets').insert(taxPresets as any),
+        supabase.from('presets').insert(discountPresets as any),
+      ]);
+
+      // Reload all presets
+      const { data: allData } = await supabase.from('presets').select('*').order('name');
+      setPresets((allData || []).map((d: any) => ({ ...d, fields: (d.fields as any as PresetField[]) || [] })));
+      toast.success('All default presets seeded successfully!');
+    } catch (err: any) {
+      toast.error('Failed to seed: ' + (err.message || 'Unknown error'));
+    }
+    setSeeding(false);
+  };
+
+  const updatePresetLink = async (presetId: string, woId: string, planId: string) => {
+    await supabase.from('presets').update({
+      unit: woId && woId !== '__none__' ? woId : null,
+      description: planId && planId !== '__none__' ? planId : null,
+    }).eq('id', presetId);
+    setPresets(prev => prev.map(p => p.id === presetId ? { ...p, unit: woId && woId !== '__none__' ? woId : undefined, description: planId && planId !== '__none__' ? planId : undefined } : p));
+    setEditingLinkId(null);
+    toast.success('Links updated');
+  };
 
   const resetForm = () => {
     setNewName(''); setNewFee(''); setNewDescription(''); setNewUnitPrice('');
@@ -772,27 +943,98 @@ export default function PresetForms() {
         {/* Existing Presets for active tab (not email_templates) */}
         {activeTab !== 'email_templates' && (
           <div className="mt-6 space-y-3">
-            <h3 className="text-sm font-semibold text-muted-foreground">Existing {activeTab.replace('_', ' ')} presets ({tabPresets.length})</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-muted-foreground">Existing {activeTab.replace('_', ' ')} presets ({tabPresets.length})</h3>
+              {tabPresets.length === 0 && (
+                <Button size="sm" variant="outline" onClick={seedDefaults} disabled={seeding} className="gap-1">
+                  {seeding ? '⏳ Seeding...' : '🌱 Seed Industry Defaults'}
+                </Button>
+              )}
+            </div>
+            {tabPresets.length === 0 && !seeding && (
+              <Card className="p-6 text-center border-dashed">
+                <p className="text-sm text-muted-foreground mb-3">No {activeTab.replace('_', ' ')} presets yet.</p>
+                <Button onClick={seedDefaults} disabled={seeding} className="gap-1">
+                  🌱 Seed All Default Presets
+                </Button>
+                <p className="text-xs text-muted-foreground mt-2">Creates work orders, plan presets, request types, fees, taxes & discounts</p>
+              </Card>
+            )}
             {tabPresets.map(p => {
-              const linkedWo = activeTab === 'request_type' && p.unit ? presets.find(x => x.id === p.unit) : null;
+              const linkedWo = (activeTab === 'request_type' || activeTab === 'plan_preset') && p.unit ? presets.find(x => x.id === p.unit) : null;
               const linkedPlan = activeTab === 'request_type' && p.description ? presets.find(x => x.id === p.description) : null;
+              const isEditingThis = editingLinkId === p.id;
               return (
                 <Card key={p.id}>
-                  <CardContent className="p-4 flex items-center justify-between">
-                    <div>
-                      <span className="font-medium text-sm">{p.name}</span>
-                      {p.fee_usd > 0 && <span className="text-xs text-muted-foreground ml-2">${p.fee_usd}</span>}
-                      {p.unit_price && <span className="text-xs text-muted-foreground ml-2">${p.unit_price}{p.unit ? `/${p.unit}` : ''}</span>}
-                      {p.discount_value && activeTab !== 'request_type' && <span className="text-xs text-muted-foreground ml-2">{p.discount_type === 'percentage' ? `${p.discount_value}%` : `$${p.discount_value}`}</span>}
-                      {p.tax_rate && <span className="text-xs text-muted-foreground ml-2">{p.tax_rate}%</span>}
-                      {linkedWo && <Badge variant="outline" className="text-[10px] ml-2">WO: {linkedWo.name}</Badge>}
-                      {linkedPlan && <Badge variant="outline" className="text-[10px] ml-2">Plan: {linkedPlan.name}</Badge>}
-                      {!linkedWo && !linkedPlan && p.description && activeTab !== 'request_type' && <p className="text-xs text-muted-foreground">{p.description}</p>}
-                      {p.fields && p.fields.length > 0 && <span className="text-[10px] text-muted-foreground ml-2">({p.fields.length} fields)</span>}
+                  <CardContent className="p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-medium text-sm">{p.name}</span>
+                        {p.fee_usd > 0 && <span className="text-xs text-muted-foreground ml-2">₹{p.fee_usd.toLocaleString()}</span>}
+                        {p.unit_price && activeTab !== 'request_type' && activeTab !== 'plan_preset' && <span className="text-xs text-muted-foreground ml-2">₹{p.unit_price}{p.unit ? `/${p.unit}` : ''}</span>}
+                        {p.discount_value && activeTab === 'discount' && <span className="text-xs text-muted-foreground ml-2">{p.discount_type === 'percentage' ? `${p.discount_value}%` : `₹${p.discount_value}`}</span>}
+                        {p.tax_rate !== undefined && activeTab === 'tax' && <span className="text-xs text-muted-foreground ml-2">{p.tax_rate}%</span>}
+                        {p.fields && p.fields.length > 0 && <span className="text-[10px] text-muted-foreground ml-2">({p.fields.length} {activeTab === 'plan_preset' ? 'sections' : 'fields'})</span>}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {(activeTab === 'request_type' || activeTab === 'plan_preset') && (
+                          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => {
+                            setEditingLinkId(isEditingThis ? null : p.id);
+                            setEditLinkWo(p.unit || '');
+                            setEditLinkPlan(p.description || '');
+                          }}>
+                            {isEditingThis ? 'Cancel' : '🔗 Edit Links'}
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => deletePreset(p.id)}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => deletePreset(p.id)}>
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
+                    {/* Link badges */}
+                    {!isEditingThis && (linkedWo || linkedPlan) && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {linkedWo && <Badge variant="outline" className="text-[10px]">WO: {linkedWo.name}</Badge>}
+                        {linkedPlan && <Badge variant="outline" className="text-[10px]">Plan: {linkedPlan.name}</Badge>}
+                      </div>
+                    )}
+                    {!isEditingThis && !linkedWo && !linkedPlan && p.description && activeTab !== 'request_type' && activeTab !== 'plan_preset' && (
+                      <p className="text-xs text-muted-foreground">{p.description}</p>
+                    )}
+                    {/* Inline link editor */}
+                    {isEditingThis && (
+                      <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/30">
+                        <div className="space-y-1">
+                          <Label className="text-[10px]">Linked Work Order</Label>
+                          <Select value={editLinkWo || '__none__'} onValueChange={setEditLinkWo}>
+                            <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">None</SelectItem>
+                              {presets.filter(x => x.category === 'work_order').map(x => (
+                                <SelectItem key={x.id} value={x.id}>{x.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {activeTab === 'request_type' && (
+                          <div className="space-y-1">
+                            <Label className="text-[10px]">Linked Plan Preset</Label>
+                            <Select value={editLinkPlan || '__none__'} onValueChange={setEditLinkPlan}>
+                              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">None</SelectItem>
+                                {presets.filter(x => x.category === 'plan_preset').map(x => (
+                                  <SelectItem key={x.id} value={x.id}>{x.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                        <Button size="sm" className="h-7 text-xs col-span-2" onClick={() => updatePresetLink(p.id, editLinkWo, editLinkPlan)}>
+                          <Save className="w-3 h-3 mr-1" /> Save Links
+                        </Button>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               );

@@ -83,7 +83,7 @@ export default function Dashboard() {
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isPermanentDelete, setIsPermanentDelete] = useState(false);
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { if (!scopeLoading) fetchData(); }, [scopeLoading, isAdmin]);
 
   const fetchData = async () => {
     const { data: patientData, error } = await supabase
@@ -97,12 +97,13 @@ export default function Dashboard() {
     const scopedPatients = isAdmin ? (patientData || []) : (patientData || []).filter(p => canAccessPatient(p));
     setPatients(scopedPatients);
 
-    if (patientData && patientData.length > 0) {
-      const patientIds = patientData.map(p => p.id);
+    if (scopedPatients.length > 0) {
+      const patientIds = scopedPatients.map(p => p.id);
       const { data: phaseData } = await supabase
         .from('phases')
         .select('*')
         .in('patient_id', patientIds)
+        .eq('is_deleted', false)
         .order('phase_order');
       setPhases(phaseData || []);
 
@@ -112,6 +113,7 @@ export default function Dashboard() {
           .from('treatment_plans')
           .select('*')
           .in('phase_id', phaseIds)
+          .eq('is_deleted', false)
           .order('sort_order');
         setPlans(planData || []);
       }
