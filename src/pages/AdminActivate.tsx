@@ -125,15 +125,14 @@ export default function AdminActivate() {
                     value={masterPassword}
                     onChange={e => setMasterPassword(e.target.value)}
                     placeholder="Enter master password..."
-                    disabled={!user}
                   />
                 </div>
                 <Button
                   onClick={handleBootstrap}
-                  disabled={loading || !masterPassword.trim() || !user}
+                  disabled={loading || !masterPassword.trim()}
                   className="w-full dental-gradient"
                 >
-                  {loading ? 'Activating...' : 'Activate Admin Access'}
+                  {loading ? 'Activating...' : user ? 'Activate Admin Access' : 'Sign In First'}
                 </Button>
                 {!user && (
                   <Button variant="outline" className="w-full" onClick={() => navigate('/auth')}>
@@ -155,15 +154,14 @@ export default function AdminActivate() {
                     onChange={e => setLicenseToken(e.target.value)}
                     placeholder="Paste your license token here..."
                     className="font-mono text-xs"
-                    disabled={!user}
                   />
                 </div>
                 <Button
                   onClick={handleActivateWithToken}
-                  disabled={loading || !licenseToken.trim() || !user}
+                  disabled={loading || !licenseToken.trim()}
                   className="w-full dental-gradient"
                 >
-                  {loading ? 'Validating...' : 'Activate with Token'}
+                  {loading ? 'Validating...' : user ? 'Activate with Token' : 'Sign In First'}
                 </Button>
               </CardContent>
             </TabsContent>
