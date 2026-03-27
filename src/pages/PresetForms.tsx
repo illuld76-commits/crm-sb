@@ -577,7 +577,8 @@ export default function PresetForms() {
                     <Eye className="w-3 h-3" /> Preview Form
                   </Button>
                 )}
-                <Button onClick={addPreset} size="sm" className="gap-1"><Plus className="w-3 h-3" /> Add Preset</Button>
+                <Button onClick={addPreset} size="sm" className="gap-1"><Plus className="w-3 h-3" /> {editingPresetId ? 'Update Preset' : 'Add Preset'}</Button>
+                {editingPresetId && <Button variant="ghost" size="sm" onClick={resetForm} className="text-xs">Cancel Edit</Button>}
               </CardContent>
             </Card>
 
@@ -711,7 +712,8 @@ export default function PresetForms() {
                     </div>
                   ))}
                 </div>
-                <Button onClick={addPreset} size="sm" className="gap-1"><Plus className="w-3 h-3" /> Save Plan Preset</Button>
+                <Button onClick={addPreset} size="sm" className="gap-1"><Plus className="w-3 h-3" /> {editingPresetId ? 'Update Plan Preset' : 'Save Plan Preset'}</Button>
+                {editingPresetId && <Button variant="ghost" size="sm" onClick={resetForm} className="text-xs">Cancel Edit</Button>}
               </CardContent>
             </Card>
           </TabsContent>
@@ -1014,9 +1016,12 @@ export default function PresetForms() {
                             setEditLinkWo(p.unit || '');
                             setEditLinkPlan(p.description || '');
                           }}>
-                            {isEditingThis ? 'Cancel' : '🔗 Edit Links'}
+                            {isEditingThis ? 'Cancel' : '🔗 Links'}
                           </Button>
                         )}
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => loadPresetForEdit(p)}>
+                          ✏️ Edit
+                        </Button>
                         <Button variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => deletePreset(p.id)}>
                           <Trash2 className="w-3 h-3" />
                         </Button>
