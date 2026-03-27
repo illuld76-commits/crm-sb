@@ -60,6 +60,15 @@ export default function NotificationBell() {
         setNotifications(prev => [payload.new as Notification, ...prev].slice(0, 15));
         setUnreadCount(prev => prev + 1);
       })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, (payload) => {
+        const updated = payload.new as Notification;
+        setNotifications(prev => prev.map(n => n.id === updated.id ? updated : n));
+        setUnreadCount(prev => {
+          const wasRead = (payload.old as Notification)?.is_read;
+          if (!wasRead && updated.is_read) return Math.max(0, prev - 1);
+          return prev;
+        });
+      })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
