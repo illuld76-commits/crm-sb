@@ -1063,6 +1063,115 @@ export default function PatientDetail() {
             </Card>
           </TabsContent>
 
+          {/* ===== TAB: TASKS ===== */}
+          <TabsContent value="tasks" className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold flex items-center gap-2"><Briefcase className="w-5 h-5" /> Tasks</h2>
+              <Button size="sm" onClick={() => setShowAddTask(!showAddTask)} className="gap-1.5">
+                <Plus className="w-3 h-3" /> Add Task
+              </Button>
+            </div>
+
+            {showAddTask && (
+              <Card className="p-4 space-y-3">
+                <Input placeholder="Task title..." value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} />
+                <Input placeholder="Description (optional)" value={newTaskDesc} onChange={e => setNewTaskDesc(e.target.value)} />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Assign to</Label>
+                    <Select value={newTaskAssignee || '__none__'} onValueChange={v => setNewTaskAssignee(v === '__none__' ? '' : v)}>
+                      <SelectTrigger className="h-9"><SelectValue placeholder="Select..." /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Unassigned</SelectItem>
+                        {allProfiles.map(p => <SelectItem key={p.user_id} value={p.user_id}>{p.display_name || p.user_id.slice(0, 8)}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Due date</Label>
+                    <Input type="date" value={newTaskDue} onChange={e => setNewTaskDue(e.target.value)} className="h-9" />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" disabled={!newTaskTitle.trim()} onClick={async () => {
+                    if (!patient || !user) return;
+                    const { data, error } = await supabase.from('tasks').insert({
+                      patient_id: patient.id,
+                      title: newTaskTitle.trim(),
+                      description: newTaskDesc.trim(),
+                      assigned_to: newTaskAssignee || null,
+                      due_date: newTaskDue || null,
+                      status: 'pending',
+                      created_by: user.id,
+                    }).select().single();
+                    if (!error && data) {
+                      setTasks(prev => [data, ...prev]);
+                      setNewTaskTitle(''); setNewTaskDesc(''); setNewTaskAssignee(''); setNewTaskDue('');
+                      setShowAddTask(false);
+                      toast.success('Task created');
+                    } else {
+                      toast.error('Failed to create task');
+                    }
+                  }}>Create</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setShowAddTask(false)}>Cancel</Button>
+                </div>
+              </Card>
+            )}
+
+            {tasks.length === 0 ? (
+              <Card className="p-8 text-center">
+                <Briefcase className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
+                <p className="text-sm text-muted-foreground">No tasks yet. Add your first task to track work.</p>
+              </Card>
+            ) : (
+              <div className="space-y-2">
+                {tasks.map(task => {
+                  const assignee = allProfiles.find(p => p.user_id === task.assigned_to);
+                  return (
+                    <Card key={task.id} className={`p-3 ${task.status === 'completed' ? 'opacity-60' : ''}`}>
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={task.status === 'completed'}
+                          onChange={async () => {
+                            const newStatus = task.status === 'completed' ? 'pending' : 'completed';
+                            await supabase.from('tasks').update({ status: newStatus }).eq('id', task.id);
+                            setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: newStatus } : t));
+                          }}
+                          className="mt-1 h-4 w-4 rounded border-border"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium ${task.status === 'completed' ? 'line-through' : ''}`}>{task.title}</p>
+                          {task.description && <p className="text-xs text-muted-foreground">{task.description}</p>}
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            {assignee && <Badge variant="outline" className="text-[9px]">{assignee.display_name || 'User'}</Badge>}
+                            {task.due_date && (
+                              <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                                <CalendarDays className="w-2.5 h-2.5" /> {format(new Date(task.due_date), 'MMM d')}
+                              </span>
+                            )}
+                            <Badge variant={task.status === 'completed' ? 'default' : task.status === 'in_progress' ? 'secondary' : 'outline'} className="text-[9px]">
+                              {task.status.replace('_', ' ')}
+                            </Badge>
+                          </div>
+                        </div>
+                        {isAdmin && (
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive shrink-0" onClick={async () => {
+                            await supabase.from('tasks').delete().eq('id', task.id);
+                            setTasks(prev => prev.filter(t => t.id !== task.id));
+                            toast.success('Task deleted');
+                          }}>
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </TabsContent>
+
           {/* ===== TAB 4: TIMELINE ===== */}
           <TabsContent value="timeline" className="space-y-4">
             <h2 className="text-lg font-bold flex items-center gap-2"><History className="w-5 h-5" /> Activity Timeline</h2>
