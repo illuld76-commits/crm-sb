@@ -411,6 +411,16 @@ export default function Billing() {
         is_locked: shouldLock,
       } as any).eq('id', invoiceId);
 
+      // Notify patient owner about payment
+      if (primaryUserId && user && primaryUserId !== user.id) {
+        sendNotification({
+          userId: primaryUserId,
+          eventType: 'payment_received',
+          placeholders: { patient_name: patientName, invoice_number: invoiceNumber, payment_amount: `${currencySymbol}${amount.toFixed(2)}`, balance_due: `${currencySymbol}${Math.max(newBalance, 0).toFixed(2)}` },
+          link: `/billing/${invoiceId}`,
+        });
+      }
+
       setShowReceiptForm(false);
       setReceiptAmount(''); setReceiptRef(''); setReceiptNotes('');
 
