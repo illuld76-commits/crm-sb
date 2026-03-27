@@ -464,6 +464,33 @@ export default function Billing() {
                     </div>
                   )}
                 </div>
+                {/* Phase/Plan selector */}
+                {patientId && patientPhases.length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border/50">
+                    <div>
+                      <Label className="text-xs">Phase</Label>
+                      <Select value={phaseId || '__none__'} onValueChange={v => setPhaseId(v === '__none__' ? null : v)} disabled={!isEditable}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select phase..." /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">None</SelectItem>
+                          {patientPhases.map(ph => <SelectItem key={ph.id} value={ph.id}>{ph.phase_name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {phaseId && patientPlans.filter(p => p.phase_id === phaseId).length > 0 && (
+                      <div>
+                        <Label className="text-xs">Plan (for reference)</Label>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {patientPlans.filter(p => p.phase_id === phaseId).map(pl => (
+                            <Badge key={pl.id} variant="outline" className="text-[10px] cursor-pointer hover:bg-accent" onClick={() => openPreview('plan', pl.id)}>
+                              {pl.plan_name}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div><Label className="text-xs">Email</Label><Input value={clientDetails.email} onChange={e => setClientDetails(p => ({ ...p, email: e.target.value }))} disabled={!isEditable} /></div>
                   <div><Label className="text-xs">Address</Label><Input value={clientDetails.address || ''} onChange={e => setClientDetails(p => ({ ...p, address: e.target.value }))} disabled={!isEditable} /></div>
