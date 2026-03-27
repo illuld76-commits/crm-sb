@@ -34,7 +34,7 @@ export default function Header({ title, children, leftActions }: HeaderProps) {
   useEffect(() => {
     if (!showQuickNav) return;
     Promise.all([
-      supabase.from('patients').select('id, patient_name').eq('is_deleted', false).order('patient_name').limit(50),
+      supabase.from('patients').select('id, patient_name').order('patient_name').limit(50),
       supabase.from('case_requests').select('id, patient_name, request_type, status').eq('is_deleted', false).order('created_at', { ascending: false }).limit(30),
     ]).then(([{ data: patients }, { data: requests }]) => {
       const items: QuickNavItem[] = [];
