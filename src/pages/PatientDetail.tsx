@@ -201,7 +201,7 @@ export default function PatientDetail() {
   useEffect(() => {
     if (!isNew && id) loadPatient(id);
     fetchSettingsEntities();
-    if (isAdmin) fetchAllProfiles();
+    fetchAllProfiles(); // Fetch for all users (needed for task assignees)
   }, [id]);
 
   const fetchSettingsEntities = async () => {
@@ -289,15 +289,73 @@ export default function PatientDetail() {
       });
     });
     setAssets([...(assetData || []), ...caseReqAssets]);
+    // Activity timeline: use local planData, not stale state
+    const phaseIds2 = (phaseData || []).map((ph: any) => ph.id);
+    const planIds2 = (planData || []).map((pl: any) => pl.id);
+    const allTargetIds = [patientId, ...phaseIds2, ...planIds2];
+
     if (isAdmin) {
-      const phaseIds2 = (phaseData || []).map((ph) => ph.id);
-      const planIds2 = plans.map((pl) => pl.id);
-      const allTargetIds = [patientId, ...phaseIds2, ...planIds2];
-      const { data: logData } = await supabase.from('audit_logs').
-      select('id, action, target_name, user_name, details, created_at').
-      in('target_id', allTargetIds).
-      order('created_at', { ascending: false }).limit(100);
+      const { data: logData } = await supabase.from('audit_logs')
+        .select('id, action, target_name, user_name, details, created_at')
+        .in('target_id', allTargetIds)
+        .order('created_at', { ascending: false }).limit(100);
       setAuditLogs(logData || []);
+    } else {
+      // Non-admin: build timeline from communications + remarks + case request history
+      const timelineItems: AuditRow[] = [];
+
+      // Communications for this case
+      if (patientId) {
+        const { data: commsData } = await supabase.from('communications')
+          .select('id, message, sender_name, created_at')
+          .eq('case_id', patientId)
+          .order('created_at', { ascending: false }).limit(50);
+        (commsData || []).forEach((c: any) => {
+          timelineItems.push({
+            id: c.id,
+            action: 'Message',
+            target_name: 'Communication',
+            user_name: c.sender_name || 'Unknown',
+            details: c.message?.substring(0, 80) || '',
+            created_at: c.created_at,
+          });
+        });
+      }
+
+      // Plan remarks for visible plans
+      if (remarkData && remarkData.length > 0) {
+        remarkData.forEach((r: any) => {
+          timelineItems.push({
+            id: r.id,
+            action: 'Remark',
+            target_name: 'Plan Note',
+            user_name: r.display_name || 'Unknown',
+            details: r.remark_text?.substring(0, 80) || '',
+            created_at: r.created_at,
+          });
+        });
+      }
+
+      // Case request history
+      const { data: caseHistory } = await supabase.from('case_requests')
+        .select('history')
+        .eq('patient_id', patientId)
+        .eq('is_deleted', false);
+      (caseHistory || []).forEach((cr: any) => {
+        ((cr.history || []) as any[]).forEach((h: any) => {
+          timelineItems.push({
+            id: h.id || crypto.randomUUID(),
+            action: h.action || 'Update',
+            target_name: 'Case Request',
+            user_name: h.user_name || 'Unknown',
+            details: '',
+            created_at: h.created_at,
+          });
+        });
+      });
+
+      timelineItems.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setAuditLogs(timelineItems.slice(0, 100));
     }
 
     // Fetch tasks
@@ -1086,6 +1144,7 @@ export default function PatientDetail() {
                         {allProfiles.map(p => <SelectItem key={p.user_id} value={p.user_id}>{p.display_name || p.user_id.slice(0, 8)}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                    {!isAdmin && <p className="text-[10px] text-muted-foreground mt-0.5">Showing users with access to this project</p>}
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Due date</Label>

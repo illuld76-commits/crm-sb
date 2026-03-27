@@ -218,19 +218,50 @@ export default function Billing() {
   const selectPatient = async (p: typeof patientResults[0]) => {
     setPatientId(p.id);
     setPatientName(p.patient_name);
-    setClientDetails(prev => ({
-      ...prev,
-      name: p.patient_name,
-      address: [p.clinic_name, p.doctor_name].filter(Boolean).join(' • '),
-    }));
     setPatientSearch('');
     setPatientResults([]);
 
     // Auto-populate primary/secondary user from patient record
-    const { data: patientFull } = await supabase.from('patients').select('primary_user_id, secondary_user_id, clinic_name, doctor_name').eq('id', p.id).single();
+    const { data: patientFull } = await supabase.from('patients').select('primary_user_id, secondary_user_id, clinic_name, doctor_name, lab_name').eq('id', p.id).single();
     if (patientFull) {
       if (patientFull.primary_user_id) setPrimaryUserId(patientFull.primary_user_id);
       if (patientFull.secondary_user_id) setSecondaryUserIds([patientFull.secondary_user_id]);
+    }
+
+    // Auto-populate client details from clinic/doctor CRM entity
+    const clinicEntity = p.clinic_name ? (await supabase.from('settings_entities').select('*').eq('entity_name', p.clinic_name).eq('entity_type', 'clinic').single()).data : null;
+    const doctorEntity = p.doctor_name ? (await supabase.from('settings_entities').select('*').eq('entity_name', p.doctor_name).eq('entity_type', 'doctor').single()).data : null;
+    const labEntity = patientFull?.lab_name ? (await supabase.from('settings_entities').select('*').eq('entity_name', patientFull.lab_name).eq('entity_type', 'lab').single()).data : null;
+
+    // Build client details from clinic/doctor entity
+    const clientEntity = clinicEntity || doctorEntity;
+    const clientAddr = clientEntity
+      ? [clientEntity.address, clientEntity.city, clientEntity.state, clientEntity.country].filter(Boolean).join(', ')
+      : [p.clinic_name, p.doctor_name].filter(Boolean).join(' • ');
+
+    setClientDetails({
+      name: p.patient_name,
+      email: (clientEntity as any)?.email || '',
+      address: clientAddr,
+    });
+
+    // Auto-fill GST from client entity
+    if ((clientEntity as any)?.gst_number) {
+      setGstNumber((clientEntity as any).gst_number);
+    }
+    if ((clientEntity as any)?.state) {
+      setPlaceOfSupply((clientEntity as any).state);
+    }
+
+    // Auto-populate merchant details from lab entity (the lab doing the work)
+    if (labEntity) {
+      const labAddr = [labEntity.address, labEntity.city, labEntity.state, labEntity.country].filter(Boolean).join(', ');
+      setMerchantDetails(prev => ({
+        ...prev,
+        name: (labEntity as any).entity_name || prev.name,
+        email: (labEntity as any).email || prev.email,
+        address: labAddr || prev.address,
+      }));
     }
 
     // Fetch phases and plans for the patient
