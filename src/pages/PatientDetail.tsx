@@ -300,6 +300,14 @@ export default function PatientDetail() {
       setAuditLogs(logData || []);
     }
 
+    // Fetch tasks
+    const { data: taskData } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('patient_id', patientId)
+      .order('created_at', { ascending: false });
+    setTasks(taskData || []);
+
     setLoading(false);
   };
 
