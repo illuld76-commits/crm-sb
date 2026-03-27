@@ -376,55 +376,10 @@ export default function CaseSubmission() {
                     )}
                     {!caseData.patient_id && ['accepted', 'in_progress', 'completed'].includes(caseData.status) && (
                       <Button size="sm" variant="outline" className="text-primary" onClick={async () => {
-                        const requestTypeName = caseData.request_type;
-                        const reqTypePreset = presets.find(p => p.category === 'request_type' && p.name === requestTypeName);
-                        const planPresetId = reqTypePreset?.description;
-                        const planPreset = planPresetId ? presets.find(p => p.id === planPresetId) : null;
-                        const planName = planPreset ? planPreset.name : requestTypeName || 'Treatment Plan';
-
-                        const { data: newPatient, error } = await supabase.from('patients').insert({
-                          patient_name: caseData.patient_name,
-                          patient_age: caseData.patient_age,
-                          patient_sex: caseData.patient_sex,
-                          user_id: caseData.user_id,
-                          clinic_name: caseData.clinic_name || null,
-                          doctor_name: caseData.doctor_name || null,
-                          lab_name: caseData.lab_name || null,
-                        }).select('id').single();
-                        if (!error && newPatient) {
-                          const { data: newPhase } = await supabase.from('phases').insert({ patient_id: newPatient.id, phase_name: caseData.patient_name, phase_order: 0 }).select('id').single();
-                          if (newPhase) {
-                            const notesJson = JSON.stringify({
-                              source: 'case_request',
-                              case_request_id: id,
-                              request_type: requestTypeName,
-                              plan_preset_id: planPresetId || null,
-                            });
-                            await supabase.from('treatment_plans').insert({
-                              phase_id: newPhase.id,
-                              plan_name: planName,
-                              plan_date: new Date().toISOString().split('T')[0],
-                              notes: notesJson,
-                              status: 'draft',
-                            } as any);
-                          }
-                          // Copy case request attachments to assets
-                          const caseAttachments = caseData.attachments || [];
-                          if (caseAttachments.length > 0) {
-                            const assetInserts = caseAttachments.map((att: any) => ({
-                              case_id: newPatient.id,
-                              file_url: att.url,
-                              file_type: att.type || 'application/octet-stream',
-                              original_name: att.name,
-                              category: 'case_request_attachment',
-                              is_viewable: true,
-                              is_downloadable: true,
-                            }));
-                            await supabase.from('assets').insert(assetInserts);
-                          }
-                          await supabase.from('case_requests').update({ patient_id: newPatient.id }).eq('id', id);
-                          toast.success('Project created with phase and plan');
-                          navigate(`/patient/${newPatient.id}`);
+                        const result = await convertCaseToProject(caseData, presets, user!.id);
+                        if (result) {
+                          toast.success('Project created with phase, plan, and draft invoice');
+                          navigate(`/patient/${result.patientId}`);
                         } else { toast.error('Failed to create project'); }
                       }}>
                         <UserPlus className="w-3.5 h-3.5 mr-1" /> Convert to Project
