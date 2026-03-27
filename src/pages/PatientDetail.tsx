@@ -132,6 +132,7 @@ export default function PatientDetail() {
   const isNew = id === 'new';
   const { user } = useAuth();
   const { isAdmin } = useRole();
+  const { filterEntities: scopeFilterEntities } = useUserScope();
   const navigate = useNavigate();
 
   const [patient, setPatient] = useState<PatientData | null>(null);
@@ -378,10 +379,18 @@ export default function PatientDetail() {
   const activePhasePlans = plans.filter((pl) => pl.phase_id === activePhaseId);
   const visibleActivePhasePlans = isAdmin ? activePhasePlans : activePhasePlans.filter((pl) => ['published', 'ongoing', 'approved', 'hold', 'rejected'].includes(pl.status));
 
-  const doctorEntities = settingsEntities.filter((e) => e.entity_type === 'doctor');
-  const clinicEntities = settingsEntities.filter((e) => e.entity_type === 'clinic');
-  const labEntities = settingsEntities.filter((e) => e.entity_type === 'lab');
+  const doctorEntitiesAll = settingsEntities.filter((e) => e.entity_type === 'doctor');
+  const clinicEntitiesAll = settingsEntities.filter((e) => e.entity_type === 'clinic');
+  const labEntitiesAll = settingsEntities.filter((e) => e.entity_type === 'lab');
   const companyEntities = settingsEntities.filter((e) => e.entity_type === 'company');
+
+  // Apply RBAC scoping for non-admin
+  const doctorEntities = scopeFilterEntities(settingsEntities, 'doctor').length > 0
+    ? scopeFilterEntities(settingsEntities, 'doctor') : doctorEntitiesAll;
+  const clinicEntities = scopeFilterEntities(settingsEntities, 'clinic').length > 0
+    ? scopeFilterEntities(settingsEntities, 'clinic') : clinicEntitiesAll;
+  const labEntities = scopeFilterEntities(settingsEntities, 'lab').length > 0
+    ? scopeFilterEntities(settingsEntities, 'lab') : labEntitiesAll;
 
   const renderFeasibilityCard = (data: any, caption: string | null) => {
     if (!data) return null;

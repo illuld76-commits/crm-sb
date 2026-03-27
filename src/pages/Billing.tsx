@@ -77,7 +77,7 @@ export default function Billing() {
   const { invoiceId } = useParams();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
-  const { isAdmin } = useRole();
+  const { isAdmin, canAccessPatient } = useUserScope();
   const navigate = useNavigate();
   const { openPreview } = useRelationalNav();
   const isNew = !invoiceId;
@@ -202,16 +202,17 @@ export default function Billing() {
     }
   }, [invoiceId, isNew, searchParams]);
 
-  // Patient search
+  // Patient search (RBAC-scoped)
   useEffect(() => {
     if (patientSearch.length < 2) { setPatientResults([]); return; }
-    const t = setTimeout(() => {
-      supabase.from('patients').select('id, patient_name, doctor_name, clinic_name')
-        .ilike('patient_name', `%${patientSearch}%`).limit(5)
-        .then(({ data }) => setPatientResults(data || []));
+    const t = setTimeout(async () => {
+      const { data } = await supabase.from('patients').select('id, patient_name, doctor_name, clinic_name, lab_name, company_name, user_id, primary_user_id, secondary_user_id')
+        .ilike('patient_name', `%${patientSearch}%`).limit(20);
+      const results = (data || []).filter(p => canAccessPatient(p));
+      setPatientResults(results.slice(0, 5));
     }, 300);
     return () => clearTimeout(t);
-  }, [patientSearch]);
+  }, [patientSearch, canAccessPatient]);
 
   const selectPatient = async (p: typeof patientResults[0]) => {
     setPatientId(p.id);

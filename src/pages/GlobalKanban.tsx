@@ -55,6 +55,7 @@ type SortOption = 'date_desc' | 'date_asc' | 'name_az' | 'name_za';
 export default function GlobalKanban() {
   const { user } = useAuth();
   const { isAdmin } = useRole();
+  const { canAccessPatient } = useUserScope();
   const navigate = useNavigate();
   const [plans, setPlans] = useState<EnrichedPlan[]>([]);
   const [caseRequests, setCaseRequests] = useState<CaseItem[]>([]);
@@ -88,10 +89,22 @@ export default function GlobalKanban() {
           phase_name: phase?.phase_name || '',
           doctor_name: (patient as any)?.doctor_name || undefined,
           remarks_count: remarkMap[plan.id] || 0,
-        } as EnrichedPlan;
+          _patient: patient, // temp for filtering
+        } as EnrichedPlan & { _patient?: any };
       });
-      setPlans(enriched);
-      setCaseRequests((cases || []) as unknown as CaseItem[]);
+
+      // RBAC: filter plans to only those whose patient the user can access
+      const scopedPlans = isAdmin ? enriched : enriched.filter(p => {
+        if (!p._patient) return false;
+        return canAccessPatient(p._patient);
+      });
+      // Clean up temp field
+      const cleanPlans = scopedPlans.map(({ _patient, ...rest }: any) => rest) as EnrichedPlan[];
+      setPlans(cleanPlans);
+
+      // RBAC: filter case requests for non-admin
+      const scopedCases = isAdmin ? (cases || []) : (cases || []).filter((c: any) => c.user_id === user?.id);
+      setCaseRequests(scopedCases as unknown as CaseItem[]);
       setLoading(false);
     };
     fetchData();
