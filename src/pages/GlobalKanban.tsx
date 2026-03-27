@@ -219,6 +219,23 @@ export default function GlobalKanban() {
       } catch { /* silent fail for auto-invoice */ }
     }
     
+    // Notify about plan status change via Kanban drag
+    if (user && plan) {
+      const { data: phData } = await supabase.from('phases').select('patient_id').eq('id', plan.phase_id).single();
+      if (phData) {
+        const { data: ptData } = await supabase.from('patients').select('user_id, primary_user_id').eq('id', phData.patient_id).single();
+        const targetUid = ptData?.primary_user_id || ptData?.user_id;
+        if (targetUid && targetUid !== user.id) {
+          sendNotification({
+            userId: targetUid,
+            eventType: newStatus === 'published' ? 'case_completed' : 'case_on_hold',
+            placeholders: { patient_name: plan.patient_name, case_type: plan.plan_name, case_status: newStatus },
+            link: `/plan/${plan.id}`,
+          });
+        }
+      }
+    }
+
     toast.success(`Moved to ${newStatus}`);
   };
 
