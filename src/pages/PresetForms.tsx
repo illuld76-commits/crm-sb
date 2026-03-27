@@ -463,9 +463,10 @@ export default function PresetForms() {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Linked Plan Preset</Label>
-                    <Select value={newDiscountValue || ''} onValueChange={setNewDiscountValue}>
+                    <Select value={newDescription || ''} onValueChange={setNewDescription}>
                       <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select plan preset..." /></SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
                         {presets.filter(p => p.category === 'plan_preset').map(p => (
                           <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                         ))}
@@ -478,9 +479,9 @@ export default function PresetForms() {
                   if (!newName || !user) return;
                   const payload: any = {
                     name: newName, fee_usd: parseFloat(newFee) || 0, type: 'case',
-                    category: 'request_type', user_id: user.id, description: newDescription || null,
+                    category: 'request_type', user_id: user.id,
+                    description: newDescription && newDescription !== '__none__' ? newDescription : null, // stores linked_plan_preset_id
                     unit: newUnit || null, // stores linked_work_order_id
-                    discount_value: newDiscountValue ? parseFloat(newDiscountValue) : null, // stores linked_plan_preset_id (as reference)
                   };
                   const { data, error } = await supabase.from('presets').insert(payload).select().single();
                   if (!error && data) {
