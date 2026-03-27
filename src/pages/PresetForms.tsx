@@ -943,27 +943,98 @@ export default function PresetForms() {
         {/* Existing Presets for active tab (not email_templates) */}
         {activeTab !== 'email_templates' && (
           <div className="mt-6 space-y-3">
-            <h3 className="text-sm font-semibold text-muted-foreground">Existing {activeTab.replace('_', ' ')} presets ({tabPresets.length})</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-muted-foreground">Existing {activeTab.replace('_', ' ')} presets ({tabPresets.length})</h3>
+              {tabPresets.length === 0 && (
+                <Button size="sm" variant="outline" onClick={seedDefaults} disabled={seeding} className="gap-1">
+                  {seeding ? '⏳ Seeding...' : '🌱 Seed Industry Defaults'}
+                </Button>
+              )}
+            </div>
+            {tabPresets.length === 0 && !seeding && (
+              <Card className="p-6 text-center border-dashed">
+                <p className="text-sm text-muted-foreground mb-3">No {activeTab.replace('_', ' ')} presets yet.</p>
+                <Button onClick={seedDefaults} disabled={seeding} className="gap-1">
+                  🌱 Seed All Default Presets
+                </Button>
+                <p className="text-xs text-muted-foreground mt-2">Creates work orders, plan presets, request types, fees, taxes & discounts</p>
+              </Card>
+            )}
             {tabPresets.map(p => {
-              const linkedWo = activeTab === 'request_type' && p.unit ? presets.find(x => x.id === p.unit) : null;
+              const linkedWo = (activeTab === 'request_type' || activeTab === 'plan_preset') && p.unit ? presets.find(x => x.id === p.unit) : null;
               const linkedPlan = activeTab === 'request_type' && p.description ? presets.find(x => x.id === p.description) : null;
+              const isEditingThis = editingLinkId === p.id;
               return (
                 <Card key={p.id}>
-                  <CardContent className="p-4 flex items-center justify-between">
-                    <div>
-                      <span className="font-medium text-sm">{p.name}</span>
-                      {p.fee_usd > 0 && <span className="text-xs text-muted-foreground ml-2">${p.fee_usd}</span>}
-                      {p.unit_price && <span className="text-xs text-muted-foreground ml-2">${p.unit_price}{p.unit ? `/${p.unit}` : ''}</span>}
-                      {p.discount_value && activeTab !== 'request_type' && <span className="text-xs text-muted-foreground ml-2">{p.discount_type === 'percentage' ? `${p.discount_value}%` : `$${p.discount_value}`}</span>}
-                      {p.tax_rate && <span className="text-xs text-muted-foreground ml-2">{p.tax_rate}%</span>}
-                      {linkedWo && <Badge variant="outline" className="text-[10px] ml-2">WO: {linkedWo.name}</Badge>}
-                      {linkedPlan && <Badge variant="outline" className="text-[10px] ml-2">Plan: {linkedPlan.name}</Badge>}
-                      {!linkedWo && !linkedPlan && p.description && activeTab !== 'request_type' && <p className="text-xs text-muted-foreground">{p.description}</p>}
-                      {p.fields && p.fields.length > 0 && <span className="text-[10px] text-muted-foreground ml-2">({p.fields.length} fields)</span>}
+                  <CardContent className="p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-medium text-sm">{p.name}</span>
+                        {p.fee_usd > 0 && <span className="text-xs text-muted-foreground ml-2">₹{p.fee_usd.toLocaleString()}</span>}
+                        {p.unit_price && activeTab !== 'request_type' && activeTab !== 'plan_preset' && <span className="text-xs text-muted-foreground ml-2">₹{p.unit_price}{p.unit ? `/${p.unit}` : ''}</span>}
+                        {p.discount_value && activeTab === 'discount' && <span className="text-xs text-muted-foreground ml-2">{p.discount_type === 'percentage' ? `${p.discount_value}%` : `₹${p.discount_value}`}</span>}
+                        {p.tax_rate !== undefined && activeTab === 'tax' && <span className="text-xs text-muted-foreground ml-2">{p.tax_rate}%</span>}
+                        {p.fields && p.fields.length > 0 && <span className="text-[10px] text-muted-foreground ml-2">({p.fields.length} {activeTab === 'plan_preset' ? 'sections' : 'fields'})</span>}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {(activeTab === 'request_type' || activeTab === 'plan_preset') && (
+                          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => {
+                            setEditingLinkId(isEditingThis ? null : p.id);
+                            setEditLinkWo(p.unit || '');
+                            setEditLinkPlan(p.description || '');
+                          }}>
+                            {isEditingThis ? 'Cancel' : '🔗 Edit Links'}
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => deletePreset(p.id)}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => deletePreset(p.id)}>
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
+                    {/* Link badges */}
+                    {!isEditingThis && (linkedWo || linkedPlan) && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {linkedWo && <Badge variant="outline" className="text-[10px]">WO: {linkedWo.name}</Badge>}
+                        {linkedPlan && <Badge variant="outline" className="text-[10px]">Plan: {linkedPlan.name}</Badge>}
+                      </div>
+                    )}
+                    {!isEditingThis && !linkedWo && !linkedPlan && p.description && activeTab !== 'request_type' && activeTab !== 'plan_preset' && (
+                      <p className="text-xs text-muted-foreground">{p.description}</p>
+                    )}
+                    {/* Inline link editor */}
+                    {isEditingThis && (
+                      <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/30">
+                        <div className="space-y-1">
+                          <Label className="text-[10px]">Linked Work Order</Label>
+                          <Select value={editLinkWo || '__none__'} onValueChange={setEditLinkWo}>
+                            <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">None</SelectItem>
+                              {presets.filter(x => x.category === 'work_order').map(x => (
+                                <SelectItem key={x.id} value={x.id}>{x.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {activeTab === 'request_type' && (
+                          <div className="space-y-1">
+                            <Label className="text-[10px]">Linked Plan Preset</Label>
+                            <Select value={editLinkPlan || '__none__'} onValueChange={setEditLinkPlan}>
+                              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">None</SelectItem>
+                                {presets.filter(x => x.category === 'plan_preset').map(x => (
+                                  <SelectItem key={x.id} value={x.id}>{x.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                        <Button size="sm" className="h-7 text-xs col-span-2" onClick={() => updatePresetLink(p.id, editLinkWo, editLinkPlan)}>
+                          <Save className="w-3 h-3 mr-1" /> Save Links
+                        </Button>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               );
