@@ -1,86 +1,208 @@
 
 
-# Full Application Audit & Fix Plan
+# Comprehensive Application Audit & Full-Scope Implementation
 
-## Issues Identified
+This plan addresses all reported issues and missing features across the entire application. It is split into 10 workstreams, each targeting a specific area.
 
-1. **Tooth chart in case view mode**: `dynamic_data` renders tooth_chart as `String([object Object])` instead of the read-only `ToothChartSelector`
-2. **Case accepted but not in Projects**: The `updateStatus('accepted')` does create a patient + phase + plan, but Dashboard doesn't re-fetch or navigate; also `case_request_id` column doesn't exist on `treatment_plans` so the `autoLoadPresetFromPhase` query always fails
-3. **Plan always shows default orthodontic sections**: The preset auto-load chain is broken because `case_request_id` is not a real column, so preset linking never works
-4. **Assets tab doesn't show case request attachments**: PatientDetail only queries the `assets` table and `plan_sections` files — it never looks at the linked `case_requests.attachments`
-5. **Global Kanban empty**: Plans show but the query filters may exclude them; also case requests tab filtering may hide results
-6. **Plan presets not visible**: The orthodontic plan preset visibility depends on having `category='plan_preset'` presets in the DB — currently only `work_order` presets exist (visible in network response)
+---
 
-## Fixes
+## 1. Seed Default Industry-Standard Presets
 
-### 1. Case Detail View — Render Tooth Chart Properly
-**File:** `src/pages/CaseSubmission.tsx` (lines 496-508)
-
-Replace the generic `String(val)` dynamic_data renderer with special handling:
-- If key is `tooth_chart`, render `<ToothChartSelector value={val} onChange={()=>{}} readOnly />`
-- For other keys, keep existing `String(val)` behavior
-
-### 2. Fix Case Request → Project Conversion
-**File:** `src/pages/CaseSubmission.tsx` (lines 195-260, 391-425)
-
-The conversion works but has issues:
-- Store the request type preset info in the plan's `notes` field (JSON) since `case_request_id` column doesn't exist on `treatment_plans`
-- After accepting, navigate to the created project so admin sees it
-- Also copy case request attachments to the `assets` table for the new patient
-
-### 3. Fix Plan Preset Auto-Load
-**File:** `src/pages/PlanEditor.tsx` (lines 126-149)
-
-The `autoLoadPresetFromPhase` searches for `case_request_id` column which doesn't exist. Fix:
-- Instead, find the case request linked to this patient by matching `patient_id` on `case_requests`
-- Then look up the request type preset chain to find the plan preset
-- Also add a manual preset selector dropdown that's always visible (admin can change preset)
-
-### 4. Show Case Request Attachments in Project Assets
-**File:** `src/pages/PatientDetail.tsx` (lines 258-264, 894-990)
-
-- After loading patient data, also query `case_requests` where `patient_id = patientId`
-- Extract their `.attachments` arrays and merge into the assets display
-- Show them with a "Case Request" badge to distinguish from plan section files
-
-### 5. Fix Global Kanban Data Loading
-**File:** `src/pages/GlobalKanban.tsx` (lines 69-111)
-
-- The data load looks correct but `is_deleted` filter on plans is missing — add `.eq('is_deleted', false)` to treatment_plans query
-- Case requests query already filters `is_deleted`
-- Verify plans aren't empty by checking the actual data flow
-
-### 6. Dashboard RBAC Scoping
-**File:** `src/pages/Dashboard.tsx` (lines 86-131)
-
-- Dashboard fetches ALL patients without RBAC filtering
-- Add `useUserScope` hook and filter patients by `canAccessPatient` for non-admin users
-- This ensures projects created from case requests appear for the right users
-
-### 7. Plan Preset Selector in Plan Editor
-**File:** `src/pages/PlanEditor.tsx`
-
-- Add a visible "Load Preset" dropdown at the top of the editor (currently only auto-loads)
-- Populate with all `plan_preset` category presets
-- Admin can switch presets at any time, which clears and re-applies sections
-
-### 8. Missing Orthodontic Plan Preset Seeding
 **File:** `src/pages/PresetForms.tsx`
 
-- The presets list shows no `plan_preset` items (network data only has `work_order` items)
-- Add a "Create Default Orthodontic Preset" button that seeds an orthodontic plan preset with IPR, Tooth Movement, Feasibility, Images sections
-- This makes the preset visible in request type linking dropdown
+Currently there are no `plan_preset` or `request_type` records in the DB, so the entire preset-driven workflow is broken.
+
+**Add a "Seed Defaults" button** (visible when no plan_presets exist) that inserts:
+
+**Plan Presets** (`category: 'plan_preset'`):
+- **Orthodontic Plan** — sections: IPR Data, Tooth Movement, Feasibility, Images, Model Analysis, Cephalometric, Audio, Video, Notes
+- **Crown & Bridge Plan** — sections: Images, Notes, Feasibility
+- **Implant Plan** — sections: Images, Model Analysis, Cephalometric, Feasibility, Notes
+- **Surgical Plan** — sections: Images, Video, Notes, Feasibility
+- **Dental Lab Work Plan** — sections: Images, Model Analysis, Notes, Feasibility
+- **General Restorative Plan** — sections: Images, Notes, Feasibility
+
+**Work Order Presets** (`category: 'work_order'`):
+- Standard Aligner, Retainer, Crown/Bridge, Implant Guide, Splint, Surgical Guide — each with relevant dental field templates
+
+**Request Types** (`category: 'request_type'`):
+- Standard Aligner (linked to Aligner work order + Orthodontic plan preset)
+- Crown & Bridge (linked to Crown/Bridge work order + Crown & Bridge plan preset)
+- Implant (linked to Implant Guide work order + Implant plan preset)
+- Surgical (linked to Surgical Guide work order + Surgical plan preset)
+
+**Fee/Item Presets** (`category: 'fee'` / `category: 'item'`):
+- Full Upper Aligner, Full Lower Aligner, Retainer Set, Crown PFM, Crown Zirconia, Implant Guide, Splint
+
+**Also add**: An "Edit Links" UI in the existing preset list — each request type row shows its linked work order and plan preset as clickable dropdowns that can be re-assigned inline.
+
+---
+
+## 2. Fix Dashboard — Projects Not Showing
+
+**File:** `src/pages/Dashboard.tsx`
+
+**Issues found:**
+- RBAC filtering runs before `useUserScope` finishes loading — `canAccessPatient` returns false during the loading state
+- The `fetchData` call on line 86 runs on mount regardless of scope loading state
+
+**Fixes:**
+- Guard `fetchData` with `if (scopeLoading) return;` and add `scopeLoading` to the useEffect dependency
+- Re-run data fetch when scope finishes loading
+- Add the `is_deleted` filter: `.eq('is_deleted', false)` to the phases query (some phases may have `is_deleted`)
+- Ensure `treatment_plans` query also adds `.eq('is_deleted', false)`
+
+---
+
+## 3. Fix Global Kanban — Empty Board
+
+**File:** `src/pages/GlobalKanban.tsx`
+
+**Issues:**
+- Kanban already has `.eq('is_deleted', false)` on plans — good
+- But patients query uses `.is('archived_at', null)` which excludes some
+- The `canAccessPatient` check at line 97-100 likely fails because `useUserScope` hasn't loaded yet when `useEffect` runs on mount
+
+**Fixes:**
+- Add scope loading guard: don't fetch until `scopeLoading === false`
+- Add `scopeLoading` and `isAdmin` to useEffect dependency array
+- Verify case_requests are also RBAC-filtered (currently filters by `user_id` for non-admin, which is correct)
+
+---
+
+## 4. Published Plan Visibility to Users
+
+**File:** `src/pages/PatientDetail.tsx`
+
+**Issues:**
+- Plans filter: `visibleActivePhasePlans` — need to verify it includes published plans for non-admin users
+- Published plan share link (Copy + Open Report) buttons only show when `plan.share_token && plan.status === 'published'` — this is correct but share_token may not be set
+
+**Fixes:**
+- In `PatientDetail.tsx`, verify `visibleActivePhasePlans` does NOT filter out published plans for non-admin users (check around line 716)
+- On plan publish in `PlanEditor.tsx`, ensure share_token is generated and saved
+- Add phase link in the header: show which phase the plan belongs to, with a badge linking back
+
+**File:** `src/pages/PlanEditor.tsx`
+- On publish, if no share_token exists, generate one: `crypto.randomUUID()` and save it
+
+---
+
+## 5. Assets — Relational Context Chips
+
+**File:** `src/pages/PatientDetail.tsx` (Assets tab, lines 913-1008)
+
+**Current state:** Assets show flat cards with no context about where they came from.
+
+**Add relational badges to each asset card:**
+- For `case_request_attachment` category: show `Badge` "Case Request" with the request type
+- For plan section files: show `Badge` "Plan: {plan_name}" and "Phase: {phase_name}"
+- For direct uploads: show `Badge` "Direct Upload"
+
+**Implementation:** When rendering asset cards, look up the source:
+- `asset.category === 'case_request_attachment'` → badge "Case Request"
+- `allFiles` (plan section files) → find the section's plan via `sections` state, then find phase name
+- `assets` table items → badge by category
+
+Also add clickable chips that navigate to the relevant entity (plan editor, case request view).
+
+---
+
+## 6. PatientDetail — Nested Workbench Navigation (already partially done)
+
+**Current state:** PatientDetail already has the nested structure: Phase tabs → Plan tabs → Sub-tabs (Details/Files/Chat). This matches the requested "Workbench Drill-Down."
+
+**Missing pieces to fix:**
+- The static header needs `flex-wrap` and responsive classes — already has `flex-col sm:flex-row` (line 549), verify no overflow on mobile
+- Add linked case request badge on each phase (if phase was created from a case request, show a small chip)
+- Show published plan link prominently in the plan header area
+
+---
+
+## 7. Plan Preset Auto-Load & Selector Fix
+
+**File:** `src/pages/PlanEditor.tsx`
+
+**Current issues:**
+- `autoLoadPresetFromPhase` works but only if presets exist in DB (they don't yet — fixed by workstream 1)
+- The manual preset selector dropdown exists but may not render if `planPresets` is empty
+
+**Fixes (post-seeding):**
+- Ensure the preset dropdown is always visible (even when `planPresets.length === 0`, show "No presets available — create in Settings")
+- When a plan is created from case acceptance, the `notes` JSON metadata should reliably chain to the correct preset
+
+---
+
+## 8. Billing Auto-Trigger on Plan Acceptance
+
+**File:** `src/pages/GlobalKanban.tsx` (plan status change handler) + `src/pages/PatientDetail.tsx`
+
+**When a user changes plan status to "approved":**
+- Auto-create a draft invoice linked to the patient/phase/plan
+- Pre-populate line items from the plan's linked request type preset fee
+- Show a toast: "Draft invoice created"
+
+**Implementation:** In the Kanban's `onDragEnd` handler (when plan moves to "approved" column), insert a draft invoice:
+```
+{ patient_id, phase_id: plan.phase_id, status: 'draft', amount_usd: preset_fee, ... }
+```
+
+---
+
+## 9. Request Type ↔ Preset Link Management
+
+**File:** `src/pages/PresetForms.tsx`
+
+**Current state:** Request types store `linked_work_order_id` in `unit` and `linked_plan_preset_id` in `description` — this works but is fragile and the existing preset list doesn't show these links.
+
+**Add to existing preset list rows:**
+- For each request type row, show the linked work order name and linked plan preset name as badges
+- Add an "Edit" button on each row that opens inline dropdowns to change the linked work order and plan preset
+- For plan preset rows, show the linked work order type name
+
+---
+
+## 10. SuiteDash-Inspired Features Gap Analysis
+
+**Features the app already has:**
+- RBAC with user assignments, Admin/User/Clinic/Doctor/Lab roles
+- Case management with phases and plans
+- Billing with invoices, receipts, presets
+- Communication hub with mentions, reactions, pinning
+- Kanban board with drag-and-drop
+- Asset management with view/download permissions
+- Notification system with templates
+- Audit logs and activity timeline
+- Soft-delete with archives
+
+**Missing SuiteDash-like features that can be added:**
+- **Client portal / external user view**: Non-admin users currently see the full app. A simplified "Client Dashboard" page already exists at `src/pages/ClientDashboard.tsx` but may not be properly routed
+- **Task management**: The `Task` type exists in `types.ts` but no task UI exists — add a simple task list per project
+- **Automated status change notifications**: Email templates exist but the trigger logic to actually send them on status changes needs wiring
+- **Batch invoicing**: Ability to generate invoices for multiple cases at once
+- **Custom branding**: Logo upload per clinic/company for white-labeling reports
+
+These are noted for future implementation but not included in this batch.
+
+---
 
 ## Files Modified
 
-1. `src/pages/CaseSubmission.tsx` — tooth chart view, attachment copy on accept, navigation after accept
-2. `src/pages/PlanEditor.tsx` — fix auto-load, add manual preset selector
-3. `src/pages/PatientDetail.tsx` — show case request attachments in assets
-4. `src/pages/GlobalKanban.tsx` — fix plan query filter
-5. `src/pages/Dashboard.tsx` — add RBAC scoping
-6. `src/pages/PresetForms.tsx` — add default preset seeding
+1. `src/pages/PresetForms.tsx` — seed defaults + edit links UI
+2. `src/pages/Dashboard.tsx` — RBAC loading guard fix
+3. `src/pages/GlobalKanban.tsx` — RBAC loading guard + auto-invoice on approval
+4. `src/pages/PatientDetail.tsx` — asset relational chips, phase-case-request badges, published plan link
+5. `src/pages/PlanEditor.tsx` — share_token on publish, preset selector always visible
+6. `src/pages/Billing.tsx` — minor: support auto-created draft invoices
 
-## No DB Migrations
+## Implementation Order
 
-All fixes use existing columns and tables. The `case_request_id` approach is abandoned in favor of matching via `patient_id` on `case_requests`.
+1. Seed default presets (unblocks everything else)
+2. Dashboard RBAC loading fix
+3. Kanban RBAC loading fix
+4. Published plan visibility + share_token
+5. Asset relational context chips
+6. Preset link management UI
+7. Billing auto-trigger on plan approval
+8. Plan editor preset selector fix
 
