@@ -55,7 +55,7 @@ type SortOption = 'date_desc' | 'date_asc' | 'name_az' | 'name_za';
 export default function GlobalKanban() {
   const { user } = useAuth();
   const { isAdmin } = useRole();
-  const { canAccessPatient } = useUserScope();
+  const { canAccessPatient, loading: scopeLoading } = useUserScope();
   const navigate = useNavigate();
   const [plans, setPlans] = useState<EnrichedPlan[]>([]);
   const [caseRequests, setCaseRequests] = useState<CaseItem[]>([]);

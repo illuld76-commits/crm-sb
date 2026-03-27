@@ -319,10 +319,19 @@ export default function PlanEditor() {
   const publishPlan = async () => {
     await savePlan();
     if (!planId) return;
-    const { data, error } = await supabase.from('treatment_plans').update({ status: 'published' }).eq('id', planId).select('share_token').single();
+    // Ensure share_token exists
+    let shareToken: string | null = null;
+    const { data: currentPlan } = await supabase.from('treatment_plans').select('share_token').eq('id', planId).single();
+    if (!currentPlan?.share_token) {
+      shareToken = crypto.randomUUID();
+      await supabase.from('treatment_plans').update({ share_token: shareToken }).eq('id', planId);
+    } else {
+      shareToken = currentPlan.share_token;
+    }
+    const { error } = await supabase.from('treatment_plans').update({ status: 'published' }).eq('id', planId);
     if (error) { toast.error('Failed to publish'); } else {
       setPlanStatus('published');
-      const url = `${window.location.origin}/report/${data.share_token}`;
+      const url = `${window.location.origin}/report/${shareToken}`;
       navigator.clipboard.writeText(url);
       toast.success('Published! Share link copied.');
       await logAction({ action: 'Publish Plan', target_type: 'plan', target_id: planId, target_name: planName, user_id: user?.id || '', user_name: user?.email || '', details: 'Plan published and share link generated' });
