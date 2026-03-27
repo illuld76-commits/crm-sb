@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import { formatDistanceToNow } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserScope } from '@/hooks/useUserScope';
@@ -76,6 +77,7 @@ export default function Dashboard() {
   const [pendingCaseCount, setPendingCaseCount] = useState(0);
   const [outstandingInvoiceCount, setOutstandingInvoiceCount] = useState(0);
   const [dueThisWeekCount, setDueThisWeekCount] = useState(0);
+  const [activityLogs, setActivityLogs] = useState<{ id: string; action: string; target_name: string; user_name: string; created_at: string; details: string }[]>([]);
 
   // Delete confirmation dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -133,6 +135,17 @@ export default function Dashboard() {
       const d = new Date(c.created_at);
       return d <= weekEnd;
     }).length);
+
+    // Fetch activity timeline from audit_logs + notifications
+    const [{ data: auditData }, { data: notifData }] = await Promise.all([
+      supabase.from('audit_logs').select('id, action, target_name, user_name, created_at, details').order('created_at', { ascending: false }).limit(20),
+      supabase.from('notifications').select('id, title, body, link, created_at').order('created_at', { ascending: false }).limit(20),
+    ]);
+    const combined = [
+      ...(auditData || []).map(a => ({ id: a.id, action: a.action, target_name: a.target_name, user_name: a.user_name, created_at: a.created_at, details: a.details || '' })),
+      ...(notifData || []).map(n => ({ id: n.id, action: n.title?.replace(/_/g, ' ') || 'Notification', target_name: '', user_name: '', created_at: n.created_at, details: n.body || '' })),
+    ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 25);
+    setActivityLogs(combined);
 
     setLoading(false);
   };
