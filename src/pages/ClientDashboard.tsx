@@ -72,7 +72,7 @@ interface ActivityItem {
 export default function ClientDashboard() {
   const { user } = useAuth();
   const { expired, expiresAt, role } = useRole();
-  const { canAccessPatient } = useUserScope();
+  const { canAccessPatient, isAdmin: scopeIsAdmin, loading: scopeLoading } = useUserScope();
   const navigate = useNavigate();
   const [patients, setPatients] = useState<PatientRow[]>([]);
   const [phases, setPhases] = useState<PhaseRow[]>([]);
@@ -87,7 +87,7 @@ export default function ClientDashboard() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [expandedPatients, setExpandedPatients] = useState<Set<string>>(new Set());
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { if (!scopeLoading) fetchData(); }, [scopeLoading]);
 
   const fetchData = async () => {
     const { data: patientData } = await supabase
@@ -124,7 +124,9 @@ export default function ClientDashboard() {
           const remarkCountMap: Record<string, number> = {};
           remarkCounts?.forEach(r => { remarkCountMap[r.plan_id] = (remarkCountMap[r.plan_id] || 0) + 1; });
 
-          const enrichedPlans: PlanRow[] = planData.map(plan => {
+          // Filter draft plans for non-admin (Plan Sovereignty)
+          const visiblePlanData = scopeIsAdmin ? planData : planData.filter(p => p.status !== 'draft');
+          const enrichedPlans: PlanRow[] = visiblePlanData.map(plan => {
             const phase = phaseData.find(ph => ph.id === plan.phase_id);
             const patient = scopedPatients.find(p => p.id === phase?.patient_id);
             return {
