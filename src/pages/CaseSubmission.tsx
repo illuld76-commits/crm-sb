@@ -83,6 +83,7 @@ export default function CaseSubmission() {
           setFormData({
             patient_name: data.patient_name || '', patient_age: data.patient_age?.toString() || '',
             patient_sex: data.patient_sex || 'male', request_type: data.request_type || '',
+            request_name: (data as any).request_name || '',
             notes: data.notes || '', status: data.status || 'draft',
             clinic_name: data.clinic_name || '', doctor_name: data.doctor_name || '', lab_name: data.lab_name || '',
           });
