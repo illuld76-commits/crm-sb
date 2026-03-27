@@ -428,6 +428,7 @@ export default function PresetForms() {
                 </div>
               </DialogContent>
             </Dialog>
+          </TabsContent>
 
           {/* Plan Presets */}
           <TabsContent value="plan_preset">
