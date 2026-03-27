@@ -15,6 +15,8 @@ const LOWER_TEETH = ['48','47','46','45','44','43','42','41','31','32','33','34'
 const UPPER_DECIDUOUS = ['55','54','53','52','51','61','62','63','64','65'];
 const LOWER_DECIDUOUS = ['85','84','83','82','81','71','72','73','74','75'];
 
+const ALL_ARCHES = [UPPER_TEETH, LOWER_TEETH, UPPER_DECIDUOUS, LOWER_DECIDUOUS];
+
 const WORK_TYPES = [
   'Crown', 'Bridge', 'Veneer', 'Inlay', 'Onlay', 'Implant', 'Extraction',
   'Root Canal', 'Splint', 'Denture', 'Retainer', 'Night Guard', 'Other',
@@ -51,6 +53,13 @@ function getToothPositions(teeth: string[], arch: 'upper' | 'lower', compact?: b
   return positions;
 }
 
+function findArch(tooth: string): string[] | null {
+  for (const arch of ALL_ARCHES) {
+    if (arch.includes(tooth)) return arch;
+  }
+  return null;
+}
+
 const WORK_TYPE_COLORS: Record<string, string> = {
   Crown: 'hsl(var(--primary))',
   Bridge: 'hsl(210, 80%, 55%)',
@@ -72,7 +81,7 @@ const ToothChartSelector: React.FC<ToothChartSelectorProps> = ({ value, onChange
   const [currentWorkType, setCurrentWorkType] = useState('Crown');
   const [currentNotes, setCurrentNotes] = useState('');
   const [showDeciduous, setShowDeciduous] = useState(false);
-  const lastClickedTooth = useRef<string | null>(null);
+  const anchorToothRef = useRef<string | null>(null);
 
   // Permanent positions
   const upperPositions = useMemo(() => getToothPositions(UPPER_TEETH, 'upper'), []);
@@ -90,46 +99,44 @@ const ToothChartSelector: React.FC<ToothChartSelectorProps> = ({ value, onChange
     return map;
   }, [value]);
 
-  // Get all teeth in current arch for shift-select range
-  const getCurrentArchTeeth = useCallback((tooth: string): string[] => {
-    if (UPPER_TEETH.includes(tooth)) return UPPER_TEETH;
-    if (LOWER_TEETH.includes(tooth)) return LOWER_TEETH;
-    if (UPPER_DECIDUOUS.includes(tooth)) return UPPER_DECIDUOUS;
-    if (LOWER_DECIDUOUS.includes(tooth)) return LOWER_DECIDUOUS;
-    return [];
-  }, []);
-
   const toggleTooth = useCallback((tooth: string, event: React.MouseEvent) => {
     if (readOnly) return;
+    event.preventDefault(); // Prevent text selection on shift-click
 
     setSelectedTeeth(prev => {
       const next = new Set(prev);
 
       // Shift+click range selection
-      if (event.shiftKey && lastClickedTooth.current) {
-        const archTeeth = getCurrentArchTeeth(tooth);
-        const lastArchTeeth = getCurrentArchTeeth(lastClickedTooth.current);
+      if (event.shiftKey && anchorToothRef.current) {
+        const anchorArch = findArch(anchorToothRef.current);
+        const toothArch = findArch(tooth);
 
-        if (archTeeth.length > 0 && archTeeth === lastArchTeeth) {
-          const startIdx = archTeeth.indexOf(lastClickedTooth.current);
-          const endIdx = archTeeth.indexOf(tooth);
+        // Only range-select within the same arch
+        if (anchorArch && toothArch && anchorArch === toothArch) {
+          const startIdx = anchorArch.indexOf(anchorToothRef.current);
+          const endIdx = anchorArch.indexOf(tooth);
           if (startIdx !== -1 && endIdx !== -1) {
             const [from, to] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
             for (let i = from; i <= to; i++) {
-              next.add(archTeeth[i]);
+              next.add(anchorArch[i]);
             }
-            lastClickedTooth.current = tooth;
+            // Don't update anchor on shift-click so user can extend from same anchor
             return next;
           }
         }
       }
 
       // Normal toggle
-      next.has(tooth) ? next.delete(tooth) : next.add(tooth);
-      lastClickedTooth.current = tooth;
+      if (next.has(tooth)) {
+        next.delete(tooth);
+      } else {
+        next.add(tooth);
+      }
+      // Set new anchor
+      anchorToothRef.current = tooth;
       return next;
     });
-  }, [readOnly, getCurrentArchTeeth]);
+  }, [readOnly]);
 
   const addSelection = () => {
     if (selectedTeeth.size === 0) return;
@@ -142,7 +149,7 @@ const ToothChartSelector: React.FC<ToothChartSelectorProps> = ({ value, onChange
     onChange([...value, newSelection]);
     setSelectedTeeth(new Set());
     setCurrentNotes('');
-    lastClickedTooth.current = null;
+    anchorToothRef.current = null;
   };
 
   const removeSelection = (id: string) => {
@@ -173,7 +180,12 @@ const ToothChartSelector: React.FC<ToothChartSelectorProps> = ({ value, onChange
     }
 
     return (
-      <g key={pos.tooth} className={readOnly ? '' : 'cursor-pointer'} onClick={(e) => toggleTooth(pos.tooth, e)}>
+      <g
+        key={pos.tooth}
+        className={readOnly ? '' : 'cursor-pointer'}
+        onMouseDown={(e) => toggleTooth(pos.tooth, e)}
+        style={{ userSelect: 'none' }}
+      >
         <rect
           x={pos.x - w / 2} y={pos.y - h / 2}
           width={w} height={h} rx={4}
@@ -185,6 +197,7 @@ const ToothChartSelector: React.FC<ToothChartSelectorProps> = ({ value, onChange
           textAnchor="middle" dominantBaseline="middle"
           fill={assigned && !isSelected ? 'white' : 'hsl(var(--foreground))'}
           fontSize={isDeciduous ? '7' : '8'} fontWeight="600"
+          style={{ pointerEvents: 'none', userSelect: 'none' }}
         >
           {pos.tooth}
         </text>
@@ -199,19 +212,17 @@ const ToothChartSelector: React.FC<ToothChartSelectorProps> = ({ value, onChange
         <div className="flex items-center gap-2">
           <Switch checked={showDeciduous} onCheckedChange={setShowDeciduous} className="h-4 w-7" />
           <Label className="text-xs text-muted-foreground">Show Deciduous (Primary) Teeth</Label>
-          {!readOnly && (
-            <span className="text-[10px] text-muted-foreground ml-auto">Shift+Click for range select</span>
-          )}
+          <span className="text-[10px] text-muted-foreground ml-auto">Shift+Click for range select</span>
         </div>
       )}
 
       {/* Permanent Tooth Chart */}
       <div className="flex flex-col items-center">
         <span className="text-xs font-medium text-muted-foreground mb-1">Permanent — Maxilla (Upper)</span>
-        <svg viewBox="0 0 560 240" className="w-full max-w-lg" style={{ minHeight: 100 }}>
+        <svg viewBox="0 0 560 240" className="w-full max-w-lg" style={{ minHeight: 100, userSelect: 'none' }}>
           {upperPositions.map(p => renderTooth(p))}
         </svg>
-        <svg viewBox="0 0 560 200" className="w-full max-w-lg" style={{ minHeight: 90 }}>
+        <svg viewBox="0 0 560 200" className="w-full max-w-lg" style={{ minHeight: 90, userSelect: 'none' }}>
           {lowerPositions.map(p => renderTooth(p))}
         </svg>
         <span className="text-xs font-medium text-muted-foreground mt-1">Permanent — Mandible (Lower)</span>
@@ -221,10 +232,10 @@ const ToothChartSelector: React.FC<ToothChartSelectorProps> = ({ value, onChange
       {showDeciduous && (
         <div className="flex flex-col items-center border-t border-border/50 pt-4">
           <span className="text-xs font-medium text-muted-foreground mb-1">Deciduous — Maxilla (Upper)</span>
-          <svg viewBox="0 0 400 180" className="w-full max-w-sm" style={{ minHeight: 80 }}>
+          <svg viewBox="0 0 400 180" className="w-full max-w-sm" style={{ minHeight: 80, userSelect: 'none' }}>
             {upperDecPositions.map(p => renderTooth(p, true))}
           </svg>
-          <svg viewBox="0 0 400 150" className="w-full max-w-sm" style={{ minHeight: 70 }}>
+          <svg viewBox="0 0 400 150" className="w-full max-w-sm" style={{ minHeight: 70, userSelect: 'none' }}>
             {lowerDecPositions.map(p => renderTooth(p, true))}
           </svg>
           <span className="text-xs font-medium text-muted-foreground mt-1">Deciduous — Mandible (Lower)</span>

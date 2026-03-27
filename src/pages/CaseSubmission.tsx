@@ -20,6 +20,7 @@ import { sendNotification } from '@/lib/notifications';
 import { FileAttachment, Preset, CaseRequest } from '@/types';
 import FilePreviewModal from '@/components/FilePreviewModal';
 import ToothChartSelector, { ToothSelection } from '@/components/ToothChartSelector';
+import { convertCaseToProject } from '@/lib/case-conversion';
 import { format, formatDistanceToNow } from 'date-fns';
 
 export default function CaseSubmission() {
@@ -34,7 +35,7 @@ export default function CaseSubmission() {
   const [isViewMode, setIsViewMode] = useState(false);
   const [formData, setFormData] = useState({
     patient_name: '', patient_age: '', patient_sex: 'male',
-    request_type: '', notes: '', status: 'draft',
+    request_type: '', request_name: '', notes: '', status: 'draft',
     clinic_name: '', doctor_name: '', lab_name: '',
   });
   const [existingAttachments, setExistingAttachments] = useState<FileAttachment[]>([]);
@@ -82,6 +83,7 @@ export default function CaseSubmission() {
           setFormData({
             patient_name: data.patient_name || '', patient_age: data.patient_age?.toString() || '',
             patient_sex: data.patient_sex || 'male', request_type: data.request_type || '',
+            request_name: (data as any).request_name || '',
             notes: data.notes || '', status: data.status || 'draft',
             clinic_name: data.clinic_name || '', doctor_name: data.doctor_name || '', lab_name: data.lab_name || '',
           });
@@ -144,17 +146,30 @@ export default function CaseSubmission() {
       for (const file of files) {
         const path = `${user.id}/case-requests/${Date.now()}_${file.name}`;
         const { error: uploadError } = await supabase.storage.from('case-files').upload(path, file);
-        if (!uploadError) {
-          const { data: urlData } = supabase.storage.from('case-files').getPublicUrl(path);
-          attachments.push({ name: file.name, url: urlData.publicUrl, type: file.type, size: file.size });
+        if (uploadError) {
+          toast.error(`Upload failed: ${file.name}`);
+          setIsSubmitting(false);
+          return;
         }
+        const { data: urlData } = supabase.storage.from('case-files').getPublicUrl(path);
+        attachments.push({ name: file.name, url: urlData.publicUrl, type: file.type, size: file.size });
       }
+
+      // Build request_items from selectedRequestTypes
+      const requestItems = selectedRequestTypes.map(rt => ({
+        request_type: rt.name,
+        qty: rt.qty,
+        rate: rt.fee,
+        preset_id: rt.presetId,
+      }));
 
       const payload: any = {
         patient_name: formData.patient_name,
         patient_age: formData.patient_age ? parseInt(formData.patient_age) : null,
         patient_sex: formData.patient_sex,
         request_type: formData.request_type,
+        request_name: formData.request_name || formData.patient_name,
+        request_items: requestItems.length > 0 ? requestItems : null,
         notes: formData.notes,
         attachments: attachments as any,
         status: isSubmitted ? 'pending' : 'draft',
@@ -170,10 +185,20 @@ export default function CaseSubmission() {
         } as any,
       };
 
+      let saveError: any = null;
       if (id) {
-        await supabase.from('case_requests').update(payload).eq('id', id);
+        const { error } = await supabase.from('case_requests').update(payload).eq('id', id);
+        saveError = error;
       } else {
-        await supabase.from('case_requests').insert(payload);
+        const { error } = await supabase.from('case_requests').insert(payload);
+        saveError = error;
+      }
+
+      if (saveError) {
+        toast.error('Failed to save case request');
+        console.error('Save error:', saveError);
+        setIsSubmitting(false);
+        return;
       }
 
       if (isSubmitted) {
@@ -189,11 +214,12 @@ export default function CaseSubmission() {
       navigate('/submitted-cases');
     } catch (error) {
       toast.error('Failed to submit case');
+      console.error(error);
     } finally { setIsSubmitting(false); }
   };
 
   const updateStatus = async (newStatus: CaseRequest['status']) => {
-    if (!id || !user) return;
+    if (!id || !user || !caseData) return;
     const historyEntry = {
       id: crypto.randomUUID(),
       action: `Status changed to ${newStatus}`,
@@ -202,76 +228,17 @@ export default function CaseSubmission() {
     };
     const currentHistory = (caseData?.history || []) as any[];
 
-    // If accepting and no patient linked, create one automatically
-    let patientIdToLink = caseData?.patient_id || selectedPatientId;
+    // If accepting, use shared conversion utility
+    let patientIdToLink = caseData.patient_id || selectedPatientId;
     if (newStatus === 'accepted') {
-      const requestTypeName = caseData!.request_type;
-      const reqTypePreset = presets.find(p => p.category === 'request_type' && p.name === requestTypeName);
-      const planPresetId = reqTypePreset?.description;
-      const planPreset = planPresetId ? presets.find(p => p.id === planPresetId) : null;
-      const planName = planPreset ? planPreset.name : requestTypeName || 'Treatment Plan';
-      const caseName = caseData!.patient_name;
-
-      if (!patientIdToLink) {
-        // Create NEW patient
-        const { data: newPatient, error: patientErr } = await supabase.from('patients').insert({
-          patient_name: caseData!.patient_name,
-          patient_age: caseData!.patient_age,
-          patient_sex: caseData!.patient_sex,
-          user_id: caseData!.user_id,
-          clinic_name: caseData!.clinic_name || null,
-          doctor_name: caseData!.doctor_name || null,
-          lab_name: caseData!.lab_name || null,
-        }).select('id').single();
-        if (!patientErr && newPatient) {
-          patientIdToLink = newPatient.id;
-        }
-      }
-
-      if (patientIdToLink) {
-        // Create phase named after the case request
-        const { data: existingPhases } = await supabase.from('phases').select('phase_order').eq('patient_id', patientIdToLink).order('phase_order', { ascending: false }).limit(1);
-        const nextOrder = (existingPhases?.[0]?.phase_order ?? -1) + 1;
-        const { data: newPhase } = await supabase.from('phases').insert({
-          patient_id: patientIdToLink,
-          phase_name: caseName,
-          phase_order: nextOrder,
-        }).select('id').single();
-
-        // Create plan named after the request type, store preset info in notes
-        if (newPhase) {
-          const notesJson = JSON.stringify({
-            source: 'case_request',
-            case_request_id: id,
-            request_type: requestTypeName,
-            plan_preset_id: planPresetId || null,
-          });
-          await supabase.from('treatment_plans').insert({
-            phase_id: newPhase.id,
-            plan_name: planName,
-            plan_date: new Date().toISOString().split('T')[0],
-            notes: notesJson,
-            status: 'draft',
-          } as any);
-        }
-
-        // Copy case request attachments to assets table
-        const caseAttachments = caseData!.attachments || [];
-        if (caseAttachments.length > 0) {
-          const assetInserts = caseAttachments.map((att: any) => ({
-            case_id: patientIdToLink!,
-            file_url: att.url,
-            file_type: att.type || 'application/octet-stream',
-            original_name: att.name,
-            category: 'case_request_attachment',
-            is_viewable: true,
-            is_downloadable: true,
-          }));
-          await supabase.from('assets').insert(assetInserts);
-        }
-
-        toast.success('Project, phase, and plan created');
-        navigate(`/patient/${patientIdToLink}`);
+      const result = await convertCaseToProject(caseData, presets, user.id);
+      if (result) {
+        patientIdToLink = result.patientId;
+        toast.success('Project, phase, plan, and draft invoice created');
+        navigate(`/patient/${result.patientId}`);
+      } else {
+        toast.error('Failed to convert case to project');
+        return;
       }
     }
 
@@ -282,9 +249,8 @@ export default function CaseSubmission() {
     }).eq('id', id);
     if (!error) {
       setCaseData(prev => prev ? { ...prev, status: newStatus, patient_id: patientIdToLink || undefined, history: [...currentHistory, historyEntry] } : prev);
-      toast.success(`Case ${newStatus.replace('_', ' ')}`);
+      if (newStatus !== 'accepted') toast.success(`Case ${newStatus.replace('_', ' ')}`);
 
-      // Log action
       await logAction({
         action: `Case ${newStatus.replace('_', ' ')}`, target_type: 'case_request',
         target_id: id, target_name: caseData?.patient_name || '',
@@ -293,7 +259,6 @@ export default function CaseSubmission() {
         old_value: caseData?.status, new_value: newStatus,
       });
 
-      // Send notification to case owner
       if (caseData?.user_id && caseData.user_id !== user.id) {
         await sendNotification({
           userId: caseData.user_id,
@@ -411,55 +376,10 @@ export default function CaseSubmission() {
                     )}
                     {!caseData.patient_id && ['accepted', 'in_progress', 'completed'].includes(caseData.status) && (
                       <Button size="sm" variant="outline" className="text-primary" onClick={async () => {
-                        const requestTypeName = caseData.request_type;
-                        const reqTypePreset = presets.find(p => p.category === 'request_type' && p.name === requestTypeName);
-                        const planPresetId = reqTypePreset?.description;
-                        const planPreset = planPresetId ? presets.find(p => p.id === planPresetId) : null;
-                        const planName = planPreset ? planPreset.name : requestTypeName || 'Treatment Plan';
-
-                        const { data: newPatient, error } = await supabase.from('patients').insert({
-                          patient_name: caseData.patient_name,
-                          patient_age: caseData.patient_age,
-                          patient_sex: caseData.patient_sex,
-                          user_id: caseData.user_id,
-                          clinic_name: caseData.clinic_name || null,
-                          doctor_name: caseData.doctor_name || null,
-                          lab_name: caseData.lab_name || null,
-                        }).select('id').single();
-                        if (!error && newPatient) {
-                          const { data: newPhase } = await supabase.from('phases').insert({ patient_id: newPatient.id, phase_name: caseData.patient_name, phase_order: 0 }).select('id').single();
-                          if (newPhase) {
-                            const notesJson = JSON.stringify({
-                              source: 'case_request',
-                              case_request_id: id,
-                              request_type: requestTypeName,
-                              plan_preset_id: planPresetId || null,
-                            });
-                            await supabase.from('treatment_plans').insert({
-                              phase_id: newPhase.id,
-                              plan_name: planName,
-                              plan_date: new Date().toISOString().split('T')[0],
-                              notes: notesJson,
-                              status: 'draft',
-                            } as any);
-                          }
-                          // Copy case request attachments to assets
-                          const caseAttachments = caseData.attachments || [];
-                          if (caseAttachments.length > 0) {
-                            const assetInserts = caseAttachments.map((att: any) => ({
-                              case_id: newPatient.id,
-                              file_url: att.url,
-                              file_type: att.type || 'application/octet-stream',
-                              original_name: att.name,
-                              category: 'case_request_attachment',
-                              is_viewable: true,
-                              is_downloadable: true,
-                            }));
-                            await supabase.from('assets').insert(assetInserts);
-                          }
-                          await supabase.from('case_requests').update({ patient_id: newPatient.id }).eq('id', id);
-                          toast.success('Project created with phase and plan');
-                          navigate(`/patient/${newPatient.id}`);
+                        const result = await convertCaseToProject(caseData, presets, user!.id);
+                        if (result) {
+                          toast.success('Project created with phase, plan, and draft invoice');
+                          navigate(`/patient/${result.patientId}`);
                         } else { toast.error('Failed to create project'); }
                       }}>
                         <UserPlus className="w-3.5 h-3.5 mr-1" /> Convert to Project
@@ -651,6 +571,10 @@ export default function CaseSubmission() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
+                <Label>Request Name</Label>
+                <Input value={formData.request_name} onChange={e => setFormData(p => ({ ...p, request_name: e.target.value }))} placeholder="e.g. Upper Arch Aligners" />
+              </div>
+              <div className="space-y-2">
                 <Label>Patient Name *</Label>
                 <Input value={formData.patient_name} onChange={e => setFormData(p => ({ ...p, patient_name: e.target.value }))} placeholder="Patient name" />
               </div>
@@ -732,6 +656,64 @@ export default function CaseSubmission() {
                 </Select>
               </div>
             </div>
+
+            {/* Request Items (qty + billing) */}
+            <Card className="border-border/50">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Request Items (Qty &amp; Billing)</Label>
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => {
+                    const reqTypePresets = presets.filter(p => p.category === 'request_type');
+                    if (reqTypePresets.length > 0) {
+                      const first = reqTypePresets[0];
+                      setSelectedRequestTypes(prev => [...prev, { presetId: first.id, name: first.name, qty: 1, fee: first.fee_usd || first.unit_price || 0 }]);
+                    } else {
+                      setSelectedRequestTypes(prev => [...prev, { presetId: '', name: formData.request_type || 'Service', qty: 1, fee: 0 }]);
+                    }
+                  }}>
+                    <Plus className="w-3 h-3 mr-1" /> Add Item
+                  </Button>
+                </div>
+                {selectedRequestTypes.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No items added. Click "Add Item" to include request types with quantities for billing.</p>
+                )}
+                {selectedRequestTypes.map((rt, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Select value={rt.name} onValueChange={v => {
+                      const preset = presets.find(p => p.category === 'request_type' && p.name === v);
+                      setSelectedRequestTypes(prev => prev.map((r, i) => i === idx ? { ...r, name: v, presetId: preset?.id || '', fee: preset?.fee_usd || preset?.unit_price || r.fee } : r));
+                    }}>
+                      <SelectTrigger className="flex-1 h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {presets.filter(p => p.category === 'request_type').map(p => (
+                          <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
+                        ))}
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <div className="flex items-center gap-1">
+                      <Label className="text-[10px] text-muted-foreground">Qty</Label>
+                      <Input type="number" className="w-16 h-8 text-xs" min={1} value={rt.qty}
+                        onChange={e => setSelectedRequestTypes(prev => prev.map((r, i) => i === idx ? { ...r, qty: parseInt(e.target.value) || 1 } : r))} />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Label className="text-[10px] text-muted-foreground">Rate</Label>
+                      <Input type="number" className="w-20 h-8 text-xs" value={rt.fee}
+                        onChange={e => setSelectedRequestTypes(prev => prev.map((r, i) => i === idx ? { ...r, fee: parseFloat(e.target.value) || 0 } : r))} />
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive shrink-0"
+                      onClick={() => setSelectedRequestTypes(prev => prev.filter((_, i) => i !== idx))}>
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ))}
+                {selectedRequestTypes.length > 0 && (
+                  <div className="text-xs text-right text-muted-foreground">
+                    Total: {selectedRequestTypes.reduce((s, r) => s + r.qty * r.fee, 0).toFixed(2)}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             <div className="space-y-2">
               <Label>Notes</Label>

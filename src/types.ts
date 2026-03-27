@@ -77,6 +77,8 @@ export interface CaseRequest {
   patient_age: number | null;
   patient_sex: string | null;
   request_type: string;
+  request_name?: string;
+  request_items?: { request_type: string; qty: number; rate: number; preset_id?: string }[];
   work_order_type?: string;
   notes: string;
   attachments: FileAttachment[];

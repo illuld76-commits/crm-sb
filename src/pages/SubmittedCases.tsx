@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
+import { useUserScope } from '@/hooks/useUserScope';
 import { supabase } from '@/integrations/supabase/client';
 import { useRelationalNav } from '@/hooks/useRelationalNav';
 import Header from '@/components/Header';
@@ -13,16 +14,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { Search, CheckCircle2, XCircle, Eye, Download, ArrowUpDown, Ban, Play, Pause, CircleCheck, Trash2, UserPlus, LayoutGrid, List } from 'lucide-react';
-import { CaseRequest } from '@/types';
+import { CaseRequest, Preset } from '@/types';
+import { convertCaseToProject } from '@/lib/case-conversion';
 
 type SortOption = 'date_desc' | 'date_asc' | 'name_az' | 'name_za';
 
 export default function SubmittedCases() {
   const { user } = useAuth();
   const { isAdmin } = useRole();
+  const { canAccessPatient, loading: scopeLoading } = useUserScope();
   const navigate = useNavigate();
   const { openPreview } = useRelationalNav();
   const [cases, setCases] = useState<CaseRequest[]>([]);
+  const [presets, setPresets] = useState<Preset[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<SortOption>('date_desc');
@@ -30,18 +34,49 @@ export default function SubmittedCases() {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
   useEffect(() => {
+    supabase.from('presets').select('*').order('name').then(({ data }) => {
+      setPresets((data || []) as unknown as Preset[]);
+    });
+  }, []);
+
+  useEffect(() => {
     const fetchCases = async () => {
-      let query = supabase.from('case_requests').select('*').eq('is_deleted', false).order('created_at', { ascending: false });
-      if (!isAdmin) query = query.eq('user_id', user?.id);
-      const { data } = await query;
-      setCases((data || []) as unknown as CaseRequest[]);
+      // Fetch all non-deleted cases; filter by RBAC on client side for non-admins
+      const { data, error } = await supabase.from('case_requests').select('*').eq('is_deleted', false).order('created_at', { ascending: false });
+      if (error) { console.error(error); setLoading(false); return; }
+      let allCases = (data || []) as unknown as CaseRequest[];
+
+      if (!isAdmin && user) {
+        // Non-admin: show own cases + cases linked to patients they can access
+        allCases = allCases.filter(c => {
+          if (c.user_id === user.id) return true;
+          if (c.patient_id) {
+            return canAccessPatient({
+              id: c.patient_id,
+              clinic_name: c.clinic_name || null,
+              doctor_name: c.doctor_name || null,
+              lab_name: c.lab_name || null,
+            });
+          }
+          // Check by entity match
+          return canAccessPatient({
+            id: c.id,
+            clinic_name: c.clinic_name || null,
+            doctor_name: c.doctor_name || null,
+            lab_name: c.lab_name || null,
+          });
+        });
+      }
+
+      setCases(allCases);
       setLoading(false);
     };
-    fetchCases();
-  }, [user, isAdmin]);
+    if (!scopeLoading) fetchCases();
+  }, [user, isAdmin, scopeLoading, canAccessPatient]);
 
   const filtered = useMemo(() => {
-    let result = cases.filter(c => !search || c.patient_name.toLowerCase().includes(search.toLowerCase()));
+    let result = cases.filter(c => !search || c.patient_name.toLowerCase().includes(search.toLowerCase())
+      || (c.request_type || '').toLowerCase().includes(search.toLowerCase()));
     if (filterStatus !== 'all') result = result.filter(c => c.status === filterStatus);
     result.sort((a, b) => {
       switch (sortBy) {
@@ -59,6 +94,8 @@ export default function SubmittedCases() {
     if (!error) {
       setCases(prev => prev.map(c => c.id === id ? { ...c, status: newStatus } : c));
       toast.success(`Case ${newStatus.replace('_', ' ')}`);
+    } else {
+      toast.error('Failed to update status');
     }
   };
 
@@ -77,21 +114,12 @@ export default function SubmittedCases() {
       navigate(`/patient/${c.patient_id}`);
       return;
     }
-    const { data: newPatient, error } = await supabase.from('patients').insert({
-      patient_name: c.patient_name,
-      patient_age: c.patient_age,
-      patient_sex: c.patient_sex,
-      user_id: c.user_id,
-      clinic_name: c.clinic_name || null,
-      doctor_name: c.doctor_name || null,
-      lab_name: c.lab_name || null,
-    }).select('id').single();
-    if (!error && newPatient) {
-      await supabase.from('phases').insert({ patient_id: newPatient.id, phase_name: 'Initial Treatment', phase_order: 0 });
-      await supabase.from('case_requests').update({ patient_id: newPatient.id }).eq('id', c.id);
-      setCases(prev => prev.map(x => x.id === c.id ? { ...x, patient_id: newPatient.id } : x));
-      toast.success('Patient case created');
-      navigate(`/patient/${newPatient.id}`);
+    if (!user) return;
+    const result = await convertCaseToProject(c, presets, user.id);
+    if (result) {
+      setCases(prev => prev.map(x => x.id === c.id ? { ...x, patient_id: result.patientId, status: 'accepted' } : x));
+      toast.success('Project created with phase, plan, and draft invoice');
+      navigate(`/patient/${result.patientId}`);
     } else {
       toast.error('Failed to create case');
     }

@@ -206,7 +206,7 @@ export default function PatientDetail() {
   }, [id]);
 
   const fetchSettingsEntities = async () => {
-    const { data } = await supabase.from('settings_entities').select('*').order('entity_name');
+    const { data } = await supabase.from('settings_entities').select('*').eq('is_deleted', false).order('entity_name');
     setSettingsEntities(data || []);
   };
 

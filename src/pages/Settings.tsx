@@ -56,7 +56,8 @@ export default function Settings() {
   useEffect(() => { fetchEntities(); }, []);
 
   const fetchEntities = async () => {
-    const { data } = await supabase.from('settings_entities').select('*').order('entity_name');
+    const { data, error } = await supabase.from('settings_entities').select('*').eq('is_deleted', false).order('entity_name');
+    if (error) { toast.error('Failed to load entities'); console.error(error); }
     setEntities(data || []);
     setLoading(false);
   };
@@ -88,7 +89,7 @@ export default function Settings() {
       if (error) { toast.error('Failed to update'); return; }
       toast.success('Updated');
     } else {
-      const { error } = await supabase.from('settings_entities').insert({ ...payload, user_id: user.id });
+      const { error } = await supabase.from('settings_entities').insert(payload);
       if (error) { toast.error('Failed to add'); return; }
       toast.success('Added');
     }
@@ -114,7 +115,7 @@ export default function Settings() {
   };
 
   const deleteEntity = async (id: string) => {
-    const { error } = await supabase.from('settings_entities').delete().eq('id', id);
+    const { error } = await supabase.from('settings_entities').update({ is_deleted: true }).eq('id', id);
     if (error) { toast.error('Failed to delete'); return; }
     setEntities(prev => prev.filter(e => e.id !== id));
     toast.success('Deleted');

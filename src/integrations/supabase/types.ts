@@ -126,6 +126,8 @@ export type Database = {
           patient_name: string
           patient_sex: string | null
           remarks: Json | null
+          request_items: Json | null
+          request_name: string | null
           request_type: string
           status: string
           updated_at: string
@@ -150,6 +152,8 @@ export type Database = {
           patient_name: string
           patient_sex?: string | null
           remarks?: Json | null
+          request_items?: Json | null
+          request_name?: string | null
           request_type?: string
           status?: string
           updated_at?: string
@@ -174,6 +178,8 @@ export type Database = {
           patient_name?: string
           patient_sex?: string | null
           remarks?: Json | null
+          request_items?: Json | null
+          request_name?: string | null
           request_type?: string
           status?: string
           updated_at?: string
