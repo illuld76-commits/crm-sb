@@ -29,7 +29,7 @@ export default function AdminActivate() {
   const handleActivateWithToken = async () => {
     if (!user) {
       toast.error('Please sign in first');
-      navigate('/auth');
+      navigate('/auth?redirect=/admin-activate');
       return;
     }
 
@@ -56,7 +56,7 @@ export default function AdminActivate() {
   const handleBootstrap = async () => {
     if (!user) {
       toast.error('Please sign in first');
-      navigate('/auth');
+      navigate('/auth?redirect=/admin-activate');
       return;
     }
 
@@ -98,6 +98,11 @@ export default function AdminActivate() {
           <p className="text-muted-foreground text-sm">
             {user ? `Activate admin access for ${user.email}` : 'Sign in first, then use Quick Setup to activate admin access.'}
           </p>
+          {!user && (
+            <p className="text-xs text-muted-foreground">
+              After sign-in, you&apos;ll return here automatically.
+            </p>
+          )}
         </div>
 
         <Card className="border-border/50 shadow-lg">
@@ -135,7 +140,7 @@ export default function AdminActivate() {
                   {loading ? 'Activating...' : user ? 'Activate Admin Access' : 'Sign In First'}
                 </Button>
                 {!user && (
-                  <Button variant="outline" className="w-full" onClick={() => navigate('/auth')}>
+                  <Button variant="outline" className="w-full" onClick={() => navigate('/auth?redirect=/admin-activate')}>
                     Go to Sign In
                   </Button>
                 )}
@@ -168,7 +173,7 @@ export default function AdminActivate() {
           </Tabs>
 
           <CardContent className="pt-0">
-            <Button variant="ghost" className="w-full" onClick={() => navigate(user ? '/' : '/auth')}>
+            <Button variant="ghost" className="w-full" onClick={() => navigate(user ? '/' : '/auth?redirect=/admin-activate')}>
               {user ? 'Back to Dashboard' : 'Back to Sign In'}
             </Button>
           </CardContent>
