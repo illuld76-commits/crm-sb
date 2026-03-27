@@ -20,6 +20,7 @@ import { sendNotification } from '@/lib/notifications';
 import { FileAttachment, Preset, CaseRequest } from '@/types';
 import FilePreviewModal from '@/components/FilePreviewModal';
 import ToothChartSelector, { ToothSelection } from '@/components/ToothChartSelector';
+import { convertCaseToProject } from '@/lib/case-conversion';
 import { format, formatDistanceToNow } from 'date-fns';
 
 export default function CaseSubmission() {
@@ -34,7 +35,7 @@ export default function CaseSubmission() {
   const [isViewMode, setIsViewMode] = useState(false);
   const [formData, setFormData] = useState({
     patient_name: '', patient_age: '', patient_sex: 'male',
-    request_type: '', notes: '', status: 'draft',
+    request_type: '', request_name: '', notes: '', status: 'draft',
     clinic_name: '', doctor_name: '', lab_name: '',
   });
   const [existingAttachments, setExistingAttachments] = useState<FileAttachment[]>([]);
