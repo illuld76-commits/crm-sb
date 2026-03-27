@@ -297,7 +297,6 @@ export default function PatientDetail() {
     const phaseIds2 = (phaseData || []).map((ph: any) => ph.id);
     const localPlanIds = fetchedPlanData.map((pl: any) => pl.id);
     const allTargetIds = [patientId, ...phaseIds2, ...localPlanIds];
-    const allTargetIds = [patientId, ...phaseIds2, ...localPlanIds];
 
     if (isAdmin) {
       const { data: logData } = await supabase.from('audit_logs')
