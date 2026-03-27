@@ -183,7 +183,7 @@ export default function Billing() {
           setItems((inv.items as any as LineItem[]) || [emptyItem()]);
           setCaseRequestId(inv.case_request_id);
           setPrimaryUserId(inv.primary_user_id);
-          setSecondaryUserIds(inv.secondary_user_ids || []);
+          setSecondaryUserIds((inv.secondary_user_ids as string[]) || []);
           setIsLocked((inv as any).is_locked || false);
         }
         setReceipts((recs || []) as unknown as Receipt[]);

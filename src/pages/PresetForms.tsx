@@ -453,7 +453,7 @@ export default function PresetForms() {
         toast.success('Template saved');
       }
     } else {
-      const { data, error } = await supabase.from('email_templates').insert(payload).select().single();
+      const { data, error } = await supabase.from('email_templates').insert(payload as any).select().single();
       if (!error && data) {
         setEmailTemplates(prev => [...prev, data as EmailTemplate]);
         setSelectedTemplate(data as EmailTemplate);

@@ -290,9 +290,10 @@ export default function PatientDetail() {
     });
     setAssets([...(assetData || []), ...caseReqAssets]);
     // Activity timeline: use local planData, not stale state
+    const localPlans = plans; // fallback reference
     const phaseIds2 = (phaseData || []).map((ph: any) => ph.id);
-    const planIds2 = (planData || []).map((pl: any) => pl.id);
-    const allTargetIds = [patientId, ...phaseIds2, ...planIds2];
+    const localPlanIds = (planData || localPlans || []).map((pl: any) => pl.id);
+    const allTargetIds = [patientId, ...phaseIds2, ...localPlanIds];
 
     if (isAdmin) {
       const { data: logData } = await supabase.from('audit_logs')
@@ -323,8 +324,8 @@ export default function PatientDetail() {
       }
 
       // Plan remarks for visible plans
-      if (remarkData && remarkData.length > 0) {
-        remarkData.forEach((r: any) => {
+      if (remarks && remarks.length > 0) {
+        remarks.forEach((r: any) => {
           timelineItems.push({
             id: r.id,
             action: 'Remark',
