@@ -189,6 +189,10 @@ export default function PresetForms() {
     if (activeTab === 'work_order') {
       payload.fields = newFields as any;
     }
+    if (activeTab === 'plan_preset') {
+      payload.fields = newFields as any;
+      payload.unit = newUnit && newUnit !== '__none__' ? newUnit : null; // linked work order ID
+    }
     const { data, error } = await supabase.from('presets').insert(payload).select().single();
     if (!error && data) {
       setPresets(prev => [...prev, { ...data, fields: (data.fields as any) || [] } as PresetRecord]);
