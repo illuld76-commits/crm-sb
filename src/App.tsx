@@ -50,6 +50,7 @@ const App = () => (
                 <RelationalPreviewDrawer />
                 <Routes>
                   <Route path="/auth" element={<Auth />} />
+                  <Route path="/admin-activate" element={<AdminActivate />} />
                   <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                     <Route index element={<Index />} />
                     <Route path="patient/:id" element={<PatientDetail />} />
@@ -72,7 +73,7 @@ const App = () => (
                     <Route path="billing/:invoiceId" element={<Billing />} />
                     <Route path="notification-settings" element={<ProtectedRoute requireAdmin><NotificationSettings /></ProtectedRoute>} />
                     <Route path="notifications" element={<Notifications />} />
-                    <Route path="admin-activate" element={<AdminActivate />} />
+                    
                   </Route>
                   <Route path="/report/:token" element={<ReportView />} />
                   <Route path="/journey/:token" element={<JourneyView />} />
