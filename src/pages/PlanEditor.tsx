@@ -236,6 +236,41 @@ export default function PlanEditor() {
     }
   };
 
+  const saveAsTemplate = async () => {
+    if (!user) return;
+    const sectionTypes = [
+      ...feasibilitySections.map(s => ({ label: s.caption || 'Feasibility', type: 'feasibility' as const, required: false })),
+      ...iprSections.map(s => ({ label: s.caption || 'IPR Data', type: 'ipr_data' as const, required: false })),
+      ...movementSections.map(s => ({ label: s.caption || 'Tooth Movement', type: 'tooth_movement' as const, required: false })),
+      ...imageSections.map(s => ({ label: s.caption || 'Images', type: 'images' as const, required: false })),
+      ...videoSections.map(s => ({ label: s.caption || 'Video', type: 'video' as const, required: false })),
+      ...audioSections.map(s => ({ label: s.caption || 'Audio', type: 'audio' as const, required: false })),
+      ...modelSections.map(s => ({ label: s.caption || 'Model Analysis', type: 'model_analysis' as const, required: false })),
+      ...cephSections.map(s => ({ label: s.caption || 'Cephalometric', type: 'cephalometric' as const, required: false })),
+    ].map(f => ({ ...f, id: crypto.randomUUID() }));
+
+    if (sectionTypes.length === 0) {
+      toast.error('No sections to save as template');
+      return;
+    }
+
+    const { error } = await supabase.from('presets').insert({
+      name: `${planName} Template`,
+      fee_usd: 0,
+      type: 'case',
+      category: 'plan_preset',
+      user_id: user.id,
+      description: `Template from plan: ${planName}`,
+      fields: sectionTypes as any,
+    });
+
+    if (!error) {
+      toast.success('Plan saved as template! Find it in Presets → Plan Presets.');
+    } else {
+      toast.error('Failed to save template');
+    }
+  };
+
   const handleIPRUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
     try {
