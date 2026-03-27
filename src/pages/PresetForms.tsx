@@ -665,6 +665,7 @@ export default function PresetForms() {
                   <Label className="text-xs font-semibold">Quick Add Sections</Label>
                   <div className="flex flex-wrap gap-1.5 p-3 bg-muted/30 rounded-lg border border-border/50">
                     {[
+                      { label: '🦷 Dental Chart', type: 'tooth_chart' as const },
                       { label: '📊 IPR Data', type: 'ipr_data' as const },
                       { label: '🦷 Tooth Movement', type: 'tooth_movement' as const },
                       { label: '🔬 Feasibility', type: 'feasibility' as const },
@@ -758,21 +759,8 @@ export default function PresetForms() {
                   </div>
                 </div>
 
-                <Button onClick={async () => {
-                  if (!newName || !user) return;
-                  const payload: any = {
-                    name: newName, fee_usd: parseFloat(newFee) || 0, type: 'case',
-                    category: 'request_type', user_id: user.id,
-                    description: newDescription && newDescription !== '__none__' ? newDescription : null, // stores linked_plan_preset_id
-                    unit: newUnit || null, // stores linked_work_order_id
-                  };
-                  const { data, error } = await supabase.from('presets').insert(payload).select().single();
-                  if (!error && data) {
-                    setPresets(prev => [...prev, { ...data, fields: (data.fields as any) || [] } as PresetRecord]);
-                    resetForm();
-                    toast.success('Request type added');
-                  }
-                }} size="sm" className="gap-1"><Plus className="w-3 h-3" /> Add Request Type</Button>
+                <Button onClick={addPreset} size="sm" className="gap-1"><Plus className="w-3 h-3" /> {editingPresetId ? 'Update Request Type' : 'Add Request Type'}</Button>
+                {editingPresetId && <Button variant="ghost" size="sm" onClick={resetForm} className="text-xs">Cancel Edit</Button>}
               </CardContent>
             </Card>
           </TabsContent>
