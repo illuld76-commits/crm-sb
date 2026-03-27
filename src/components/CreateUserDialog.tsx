@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import { UserPlus, X, Plus } from 'lucide-react';
 
 interface Assignment {
-  type: 'patient' | 'clinic' | 'doctor';
+  type: 'patient' | 'clinic' | 'doctor' | 'lab' | 'company';
   value: string;
   expires_at: string | null;
 }
@@ -33,7 +33,7 @@ export default function CreateUserDialog({ patients, onCreated }: CreateUserDial
   const [passwordHint, setPasswordHint] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
   const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [assignType, setAssignType] = useState<'patient' | 'clinic' | 'doctor'>('patient');
+  const [assignType, setAssignType] = useState<'patient' | 'clinic' | 'doctor' | 'lab' | 'company'>('patient');
   const [assignValue, setAssignValue] = useState('');
   const [loading, setLoading] = useState(false);
   const [entities, setEntities] = useState<{ id: string; entity_name: string; entity_type: string }[]>([]);
@@ -70,6 +70,12 @@ export default function CreateUserDialog({ patients, onCreated }: CreateUserDial
         return entities.filter(e => e.entity_type === 'clinic').map(e => ({ value: e.entity_name, label: e.entity_name }));
       case 'doctor':
         return entities.filter(e => e.entity_type === 'doctor').map(e => ({ value: e.entity_name, label: e.entity_name }));
+      case 'lab':
+        return entities.filter(e => e.entity_type === 'lab').map(e => ({ value: e.entity_name, label: e.entity_name }));
+      case 'company':
+        return entities.filter(e => e.entity_type === 'company').map(e => ({ value: e.entity_name, label: e.entity_name }));
+      default:
+        return [];
     }
   };
 
@@ -161,14 +167,16 @@ export default function CreateUserDialog({ patients, onCreated }: CreateUserDial
           <div className="space-y-2">
             <Label>Assign Access</Label>
             <div className="flex gap-2">
-              <Select value={assignType} onValueChange={(v: 'patient' | 'clinic' | 'doctor') => { setAssignType(v); setAssignValue(''); }}>
-                <SelectTrigger className="w-[100px]">
+              <Select value={assignType} onValueChange={(v: 'patient' | 'clinic' | 'doctor' | 'lab' | 'company') => { setAssignType(v); setAssignValue(''); }}>
+                <SelectTrigger className="w-[110px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="patient">Patient</SelectItem>
                   <SelectItem value="clinic">Clinic</SelectItem>
                   <SelectItem value="doctor">Doctor</SelectItem>
+                  <SelectItem value="lab">Lab</SelectItem>
+                  <SelectItem value="company">Company</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={assignValue} onValueChange={setAssignValue}>
