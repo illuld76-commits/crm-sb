@@ -571,6 +571,10 @@ export default function CaseSubmission() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
+                <Label>Request Name</Label>
+                <Input value={formData.request_name} onChange={e => setFormData(p => ({ ...p, request_name: e.target.value }))} placeholder="e.g. Upper Arch Aligners" />
+              </div>
+              <div className="space-y-2">
                 <Label>Patient Name *</Label>
                 <Input value={formData.patient_name} onChange={e => setFormData(p => ({ ...p, patient_name: e.target.value }))} placeholder="Patient name" />
               </div>
