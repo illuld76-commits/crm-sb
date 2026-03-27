@@ -1,79 +1,86 @@
 
 
-# RBAC-Scoped Dropdowns & Cross-Module Access Control
+# Full Application Audit & Fix Plan
 
-## Problem
+## Issues Identified
 
-Non-admin users see ALL doctors, clinics, and labs in dropdowns across the app, even when they are only assigned to one clinic. The `user_assignments` table already tracks who can see what, but no module uses it to filter dropdown options or restrict data access. Patient search also returns unscoped results.
+1. **Tooth chart in case view mode**: `dynamic_data` renders tooth_chart as `String([object Object])` instead of the read-only `ToothChartSelector`
+2. **Case accepted but not in Projects**: The `updateStatus('accepted')` does create a patient + phase + plan, but Dashboard doesn't re-fetch or navigate; also `case_request_id` column doesn't exist on `treatment_plans` so the `autoLoadPresetFromPhase` query always fails
+3. **Plan always shows default orthodontic sections**: The preset auto-load chain is broken because `case_request_id` is not a real column, so preset linking never works
+4. **Assets tab doesn't show case request attachments**: PatientDetail only queries the `assets` table and `plan_sections` files — it never looks at the linked `case_requests.attachments`
+5. **Global Kanban empty**: Plans show but the query filters may exclude them; also case requests tab filtering may hide results
+6. **Plan presets not visible**: The orthodontic plan preset visibility depends on having `category='plan_preset'` presets in the DB — currently only `work_order` presets exist (visible in network response)
 
-## Solution: Create a shared RBAC context hook and apply it everywhere
+## Fixes
 
-### 1. New hook: `src/hooks/useUserScope.tsx`
+### 1. Case Detail View — Render Tooth Chart Properly
+**File:** `src/pages/CaseSubmission.tsx` (lines 496-508)
 
-A reusable hook that, for non-admin users:
-- Fetches their `user_assignments` (clinic, doctor, lab, patient, company)
-- Returns scoped lists: `allowedClinics`, `allowedDoctors`, `allowedLabs`, `allowedPatientIds`
-- For admins, returns `null` (meaning "show all")
-- Caches in state so it's fetched once per session
+Replace the generic `String(val)` dynamic_data renderer with special handling:
+- If key is `tooth_chart`, render `<ToothChartSelector value={val} onChange={()=>{}} readOnly />`
+- For other keys, keep existing `String(val)` behavior
 
-```
-useUserScope() → {
-  allowedClinics: string[] | null,  // null = admin, all access
-  allowedDoctors: string[] | null,
-  allowedLabs: string[] | null,
-  allowedPatientIds: string[] | null,
-  filterEntities: (entities, type) => filtered,
-  canAccessPatient: (patient) => boolean,
-  loading: boolean
-}
-```
+### 2. Fix Case Request → Project Conversion
+**File:** `src/pages/CaseSubmission.tsx` (lines 195-260, 391-425)
 
-### 2. CaseSubmission.tsx — Filter dropdowns
+The conversion works but has issues:
+- Store the request type preset info in the plan's `notes` field (JSON) since `case_request_id` column doesn't exist on `treatment_plans`
+- After accepting, navigate to the created project so admin sees it
+- Also copy case request attachments to the `assets` table for the new patient
 
-- Doctor dropdown: only show doctors from `allowedDoctors` (or all for admin)
-- Clinic dropdown: only show clinics from `allowedClinics`
-- Lab dropdown: only show labs from `allowedLabs`
-- Patient search: filter results by `checkAccess()` for non-admins
-- Auto-fill clinic/doctor from user's single assignment if they have exactly one
+### 3. Fix Plan Preset Auto-Load
+**File:** `src/pages/PlanEditor.tsx` (lines 126-149)
 
-### 3. Billing.tsx — Filter patient search
+The `autoLoadPresetFromPhase` searches for `case_request_id` column which doesn't exist. Fix:
+- Instead, find the case request linked to this patient by matching `patient_id` on `case_requests`
+- Then look up the request type preset chain to find the plan preset
+- Also add a manual preset selector dropdown that's always visible (admin can change preset)
 
-- Patient search results filtered by user's assignments
-- Phase/plan selection already scoped to selected patient, so that's fine
+### 4. Show Case Request Attachments in Project Assets
+**File:** `src/pages/PatientDetail.tsx` (lines 258-264, 894-990)
 
-### 4. PatientDetail.tsx — Filter entity dropdowns
+- After loading patient data, also query `case_requests` where `patient_id = patientId`
+- Extract their `.attachments` arrays and merge into the assets display
+- Show them with a "Case Request" badge to distinguish from plan section files
 
-- Same pattern: doctor/clinic/lab dropdowns scoped to user's assignments
-- Non-admin users can only edit entities they have access to
+### 5. Fix Global Kanban Data Loading
+**File:** `src/pages/GlobalKanban.tsx` (lines 69-111)
 
-### 5. GlobalKanban.tsx, Messages.tsx, BillingList.tsx — Verify scoping
+- The data load looks correct but `is_deleted` filter on plans is missing — add `.eq('is_deleted', false)` to treatment_plans query
+- Case requests query already filters `is_deleted`
+- Verify plans aren't empty by checking the actual data flow
 
-- Ensure queries filter by user's accessible patients/cases
-- Already partially done via `checkAccess()` in Layout, but verify direct queries in these pages
+### 6. Dashboard RBAC Scoping
+**File:** `src/pages/Dashboard.tsx` (lines 86-131)
 
-### 6. Sidebar.tsx — Scoped navigation data
+- Dashboard fetches ALL patients without RBAC filtering
+- Add `useUserScope` hook and filter patients by `canAccessPatient` for non-admin users
+- This ensures projects created from case requests appear for the right users
 
-- Already uses Layout's filtered data — verify case requests pane also filters by user_id for non-admins
+### 7. Plan Preset Selector in Plan Editor
+**File:** `src/pages/PlanEditor.tsx`
 
-### 7. Auto-fill for single-assignment users
+- Add a visible "Load Preset" dropdown at the top of the editor (currently only auto-loads)
+- Populate with all `plan_preset` category presets
+- Admin can switch presets at any time, which clears and re-applies sections
 
-- If a user has exactly 1 clinic assignment, auto-set `clinic_name` in case request form and make it read-only
-- Same for doctor/lab if they have exactly 1
+### 8. Missing Orthodontic Plan Preset Seeding
+**File:** `src/pages/PresetForms.tsx`
 
-## Files to modify
+- The presets list shows no `plan_preset` items (network data only has `work_order` items)
+- Add a "Create Default Orthodontic Preset" button that seeds an orthodontic plan preset with IPR, Tooth Movement, Feasibility, Images sections
+- This makes the preset visible in request type linking dropdown
 
-1. **New:** `src/hooks/useUserScope.tsx` — shared RBAC scope hook
-2. `src/pages/CaseSubmission.tsx` — filter dropdowns + patient search + auto-fill
-3. `src/pages/Billing.tsx` — filter patient search
-4. `src/pages/PatientDetail.tsx` — filter entity dropdowns
-5. `src/pages/GlobalKanban.tsx` — verify data scoping
-6. `src/pages/BillingList.tsx` — verify data scoping
+## Files Modified
 
-## Technical approach
+1. `src/pages/CaseSubmission.tsx` — tooth chart view, attachment copy on accept, navigation after accept
+2. `src/pages/PlanEditor.tsx` — fix auto-load, add manual preset selector
+3. `src/pages/PatientDetail.tsx` — show case request attachments in assets
+4. `src/pages/GlobalKanban.tsx` — fix plan query filter
+5. `src/pages/Dashboard.tsx` — add RBAC scoping
+6. `src/pages/PresetForms.tsx` — add default preset seeding
 
-- The hook reads from `user_assignments` (already exists) and `settings_entities`
-- For admin users, no filtering is applied (all data visible)
-- For non-admin users, dropdowns show only assigned entities
-- Patient search adds a client-side filter using `checkAccess()` from `access-control.ts`
-- No DB migrations needed — uses existing tables and columns
+## No DB Migrations
+
+All fixes use existing columns and tables. The `case_request_id` approach is abandoned in favor of matching via `patient_id` on `case_requests`.
 
