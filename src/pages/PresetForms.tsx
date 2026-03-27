@@ -136,6 +136,7 @@ export default function PresetForms() {
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
   const [editLinkWo, setEditLinkWo] = useState('');
   const [editLinkPlan, setEditLinkPlan] = useState('');
+  const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
 
   // New preset form state
   const [newName, setNewName] = useState('');
@@ -338,6 +339,22 @@ export default function PresetForms() {
   const resetForm = () => {
     setNewName(''); setNewFee(''); setNewDescription(''); setNewUnitPrice('');
     setNewUnit(''); setNewDiscountValue(''); setNewTaxRate(''); setNewFields([]);
+    setEditingPresetId(null);
+  };
+
+  const loadPresetForEdit = (p: PresetRecord) => {
+    setEditingPresetId(p.id);
+    setNewName(p.name);
+    setNewFee(String(p.fee_usd || ''));
+    setNewDescription(p.description || '');
+    setNewUnitPrice(String(p.unit_price || ''));
+    setNewUnit(p.unit || '');
+    setNewDiscountValue(String(p.discount_value || ''));
+    setNewTaxRate(String(p.tax_rate || ''));
+    setNewFields(p.fields || []);
+    if (p.discount_type) setNewDiscountType(p.discount_type);
+    setActiveTab(p.category);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const addPreset = async () => {
@@ -362,19 +379,33 @@ export default function PresetForms() {
     }
     if (activeTab === 'plan_preset') {
       payload.fields = newFields as any;
-      payload.unit = newUnit && newUnit !== '__none__' ? newUnit : null; // linked work order ID
+      payload.unit = newUnit && newUnit !== '__none__' ? newUnit : null;
     }
-    const { data, error } = await supabase.from('presets').insert(payload).select().single();
-    if (!error && data) {
-      setPresets(prev => [...prev, { ...data, fields: (data.fields as any) || [] } as PresetRecord]);
-      resetForm();
-      toast.success('Preset added');
+
+    if (editingPresetId) {
+      // Update existing
+      const { error } = await supabase.from('presets').update(payload).eq('id', editingPresetId);
+      if (!error) {
+        setPresets(prev => prev.map(p => p.id === editingPresetId ? { ...p, ...payload, fields: payload.fields || p.fields } : p));
+        resetForm();
+        toast.success('Preset updated');
+      } else {
+        toast.error('Failed to update');
+      }
+    } else {
+      const { data, error } = await supabase.from('presets').insert(payload).select().single();
+      if (!error && data) {
+        setPresets(prev => [...prev, { ...data, fields: (data.fields as any) || [] } as PresetRecord]);
+        resetForm();
+        toast.success('Preset added');
+      }
     }
   };
 
   const deletePreset = async (id: string) => {
     await supabase.from('presets').delete().eq('id', id);
     setPresets(prev => prev.filter(p => p.id !== id));
+    if (editingPresetId === id) resetForm();
     toast.success('Preset deleted');
   };
 
@@ -546,7 +577,8 @@ export default function PresetForms() {
                     <Eye className="w-3 h-3" /> Preview Form
                   </Button>
                 )}
-                <Button onClick={addPreset} size="sm" className="gap-1"><Plus className="w-3 h-3" /> Add Preset</Button>
+                <Button onClick={addPreset} size="sm" className="gap-1"><Plus className="w-3 h-3" /> {editingPresetId ? 'Update Preset' : 'Add Preset'}</Button>
+                {editingPresetId && <Button variant="ghost" size="sm" onClick={resetForm} className="text-xs">Cancel Edit</Button>}
               </CardContent>
             </Card>
 
@@ -680,7 +712,8 @@ export default function PresetForms() {
                     </div>
                   ))}
                 </div>
-                <Button onClick={addPreset} size="sm" className="gap-1"><Plus className="w-3 h-3" /> Save Plan Preset</Button>
+                <Button onClick={addPreset} size="sm" className="gap-1"><Plus className="w-3 h-3" /> {editingPresetId ? 'Update Plan Preset' : 'Save Plan Preset'}</Button>
+                {editingPresetId && <Button variant="ghost" size="sm" onClick={resetForm} className="text-xs">Cancel Edit</Button>}
               </CardContent>
             </Card>
           </TabsContent>
@@ -983,9 +1016,12 @@ export default function PresetForms() {
                             setEditLinkWo(p.unit || '');
                             setEditLinkPlan(p.description || '');
                           }}>
-                            {isEditingThis ? 'Cancel' : '🔗 Edit Links'}
+                            {isEditingThis ? 'Cancel' : '🔗 Links'}
                           </Button>
                         )}
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => loadPresetForEdit(p)}>
+                          ✏️ Edit
+                        </Button>
                         <Button variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => deletePreset(p.id)}>
                           <Trash2 className="w-3 h-3" />
                         </Button>

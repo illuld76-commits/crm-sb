@@ -14,7 +14,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { format, differenceInDays, differenceInHours } from 'date-fns';
-import { Calendar, Lock, Search, ArrowUpDown, CheckCircle2, XCircle, Ban, Eye, Paperclip, User, MessageSquare, AlertTriangle } from 'lucide-react';
+import { Calendar, Lock, Search, ArrowUpDown, CheckCircle2, XCircle, Ban, Eye, Paperclip, User, MessageSquare, AlertTriangle, LayoutGrid, List } from 'lucide-react';
 import { toast } from 'sonner';
 import { PlanWithContext } from '@/types';
 import { logAction } from '@/lib/audit';
@@ -65,6 +65,7 @@ export default function GlobalKanban() {
   const [sortBy, setSortBy] = useState<SortOption>('date_desc');
   const [caseFilterStatus, setCaseFilterStatus] = useState('all');
   const [filterDoctor, setFilterDoctor] = useState('all');
+  const [caseViewMode, setCaseViewMode] = useState<'list' | 'grid'>('list');
 
   useEffect(() => {
     if (scopeLoading) return;
@@ -246,18 +247,24 @@ export default function GlobalKanban() {
             </Select>
           )}
           {activeView === 'cases' && (
-            <Select value={caseFilterStatus} onValueChange={setCaseFilterStatus}>
-              <SelectTrigger className="w-32 h-9 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="accepted">Accepted</SelectItem>
-                <SelectItem value="in_progress">In Progress</SelectItem>
-                <SelectItem value="on_hold">On Hold</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="discarded">Discarded</SelectItem>
-              </SelectContent>
-            </Select>
+            <>
+              <Select value={caseFilterStatus} onValueChange={setCaseFilterStatus}>
+                <SelectTrigger className="w-32 h-9 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="accepted">Accepted</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="on_hold">On Hold</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="discarded">Discarded</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="flex items-center border rounded-md overflow-hidden">
+                <Button variant={caseViewMode === 'list' ? 'secondary' : 'ghost'} size="sm" className="h-9 rounded-none" onClick={() => setCaseViewMode('list')}><List className="w-3 h-3" /></Button>
+                <Button variant={caseViewMode === 'grid' ? 'secondary' : 'ghost'} size="sm" className="h-9 rounded-none" onClick={() => setCaseViewMode('grid')}><LayoutGrid className="w-3 h-3" /></Button>
+              </div>
+            </>
           )}
           <Select value={sortBy} onValueChange={v => setSortBy(v as SortOption)}>
             <SelectTrigger className="w-28 h-9 text-xs"><ArrowUpDown className="w-3 h-3 mr-1" /><SelectValue /></SelectTrigger>
@@ -361,12 +368,33 @@ export default function GlobalKanban() {
           </DragDropContext>
         ) : (
           /* Case Approval Queue */
-          <div className="space-y-3">
+          <div className={caseViewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4' : 'space-y-3'}>
             {filteredCases.length === 0 ? (
-              <p className="text-center py-10 text-muted-foreground">No case requests found</p>
+              <p className="text-center py-10 text-muted-foreground col-span-full">No case requests found</p>
             ) : filteredCases.map(c => {
               const attachCount = Array.isArray(c.attachments) ? c.attachments.length : 0;
-              return (
+              return caseViewMode === 'grid' ? (
+                <Card key={c.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate(`/work-order/${c.id}`)}>
+                  <CardContent className="p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-sm truncate">{c.patient_name}</span>
+                      <div className={`w-2 h-2 rounded-full ${statusColor(c.status)}`} />
+                    </div>
+                    <Badge variant="outline" className="text-[10px]">{c.status.replace('_', ' ')}</Badge>
+                    <p className="text-xs text-muted-foreground">{c.request_type}</p>
+                    <p className="text-[10px] text-muted-foreground">{format(new Date(c.created_at), 'MMM d, yyyy')}</p>
+                    {c.doctor_name && <p className="text-[10px] text-muted-foreground">{c.doctor_name}</p>}
+                    <div className="flex gap-1 flex-wrap pt-1" onClick={e => e.stopPropagation()}>
+                      {isAdmin && c.status === 'pending' && (
+                        <>
+                          <Button variant="ghost" size="sm" className="text-green-600 h-6 text-[10px]" onClick={() => updateCaseStatus(c.id, 'accepted')}>Accept</Button>
+                          <Button variant="ghost" size="sm" className="text-destructive h-6 text-[10px]" onClick={() => updateCaseStatus(c.id, 'rejected')}>Reject</Button>
+                        </>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
                 <Card key={c.id} className="hover:shadow-md transition-shadow">
                   <CardContent className="p-4 flex items-center justify-between">
                     <div className="flex-1 min-w-0">

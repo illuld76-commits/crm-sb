@@ -217,9 +217,21 @@ export default function Billing() {
   const selectPatient = async (p: typeof patientResults[0]) => {
     setPatientId(p.id);
     setPatientName(p.patient_name);
-    setClientDetails(prev => ({ ...prev, name: p.patient_name }));
+    setClientDetails(prev => ({
+      ...prev,
+      name: p.patient_name,
+      address: [p.clinic_name, p.doctor_name].filter(Boolean).join(' • '),
+    }));
     setPatientSearch('');
     setPatientResults([]);
+
+    // Auto-populate primary/secondary user from patient record
+    const { data: patientFull } = await supabase.from('patients').select('primary_user_id, secondary_user_id, clinic_name, doctor_name').eq('id', p.id).single();
+    if (patientFull) {
+      if (patientFull.primary_user_id) setPrimaryUserId(patientFull.primary_user_id);
+      if (patientFull.secondary_user_id) setSecondaryUserIds([patientFull.secondary_user_id]);
+    }
+
     // Fetch phases and plans for the patient
     const { data: phasesData } = await supabase.from('phases').select('id, phase_name').eq('patient_id', p.id).order('phase_order');
     setPatientPhases(phasesData || []);
@@ -229,23 +241,38 @@ export default function Billing() {
       setPatientPlans((plansData || []) as any);
 
       // Auto-populate line items from linked case request's request type
-      if (isNew && plansData && plansData.length > 0) {
-        const planWithRequest = plansData.find((pl: any) => pl.case_request_id);
-        if (planWithRequest) {
-          const { data: caseReq } = await supabase.from('case_requests').select('request_type').eq('id', (planWithRequest as any).case_request_id).single();
-          if (caseReq) {
-            const reqTypePreset = allPresets.find(pr => pr.category === 'request_type' && pr.name === caseReq.request_type);
-            if (reqTypePreset) {
-              setItems([{
-                description: reqTypePreset.name,
-                hsn: '9993',
-                qty: 1,
-                rate: reqTypePreset.unit_price || reqTypePreset.fee_usd || 0,
-                disc_pct: 0,
-                gst_pct: reqTypePreset.tax_rate || 18,
-              }]);
-              setCaseRequestId((planWithRequest as any).case_request_id);
-            }
+      if (isNew) {
+        // Try from plan's case_request_id first, then from patient's case_requests
+        let caseReqType: string | null = null;
+        let caseReqId: string | null = null;
+        if (plansData && plansData.length > 0) {
+          const planWithRequest = plansData.find((pl: any) => pl.case_request_id);
+          if (planWithRequest) {
+            caseReqId = (planWithRequest as any).case_request_id;
+            const { data: caseReq } = await supabase.from('case_requests').select('request_type').eq('id', caseReqId!).single();
+            if (caseReq) caseReqType = caseReq.request_type;
+          }
+        }
+        // Fallback: look up case_requests by patient_id
+        if (!caseReqType) {
+          const { data: patientCases } = await supabase.from('case_requests').select('id, request_type').eq('patient_id', p.id).eq('is_deleted', false).limit(1);
+          if (patientCases && patientCases.length > 0) {
+            caseReqType = patientCases[0].request_type;
+            caseReqId = patientCases[0].id;
+          }
+        }
+        if (caseReqType) {
+          const reqTypePreset = allPresets.find(pr => pr.category === 'request_type' && pr.name === caseReqType);
+          if (reqTypePreset) {
+            setItems([{
+              description: reqTypePreset.name,
+              hsn: '9993',
+              qty: 1,
+              rate: reqTypePreset.unit_price || reqTypePreset.fee_usd || 0,
+              disc_pct: 0,
+              gst_pct: reqTypePreset.tax_rate || 18,
+            }]);
+            if (caseReqId) setCaseRequestId(caseReqId);
           }
         }
       }
@@ -452,6 +479,16 @@ export default function Billing() {
             <Button variant="outline" size="sm" onClick={() => window.print()}>
               <Printer className="w-3 h-3 mr-1" /> Print
             </Button>
+            {isAdmin && !isNew && (
+              <Button variant="destructive" size="sm" onClick={async () => {
+                if (!confirm('Delete this invoice? It will be moved to Archives.')) return;
+                await supabase.from('invoices').update({ is_deleted: true }).eq('id', invoiceId);
+                toast.success('Invoice deleted (moved to archives)');
+                navigate('/billing');
+              }}>
+                <Trash2 className="w-3 h-3 mr-1" /> Delete
+              </Button>
+            )}
           </div>
         </div>
 

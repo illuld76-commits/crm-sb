@@ -8,14 +8,13 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Download, FileText, ImageIcon, Film, Eye, EyeOff } from 'lucide-react';
+import { Search, Download, FileText, ImageIcon, Film, Eye, EyeOff, LayoutGrid, List } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import FilePreviewModal, { PreviewFile } from '@/components/FilePreviewModal';
 
 interface AssetRow {
   id: string;
-  case_id: string;
   file_url: string;
   file_type: string;
   category: string;
@@ -25,9 +24,11 @@ interface AssetRow {
   created_at: string;
   file_size?: number;
   patient_name?: string;
+  source: string;
+  source_detail?: string;
 }
 
-const CATEGORIES = ['All', 'Photo', 'X-Ray', 'STL', 'Video', 'Document', 'Audio', 'Other'];
+const CATEGORIES = ['All', 'Photo', 'X-Ray', 'STL', 'Video', 'Document', 'Audio', 'Other', 'Plan Section', 'Case Attachment'];
 
 export default function GlobalAssets() {
   const { user } = useAuth();
@@ -37,12 +38,16 @@ export default function GlobalAssets() {
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('All');
   const [previewFile, setPreviewFile] = useState<PreviewFile | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   useEffect(() => {
     fetchAssets();
   }, []);
 
   const fetchAssets = async () => {
+    const allAssets: AssetRow[] = [];
+
+    // 1. Fetch from assets table
     const { data: assetData } = await supabase
       .from('assets')
       .select('*')
@@ -51,15 +56,114 @@ export default function GlobalAssets() {
 
     if (assetData) {
       const caseIds = [...new Set(assetData.map(a => a.case_id).filter(Boolean))];
-      const { data: patients } = await supabase.from('patients').select('id, patient_name').in('id', caseIds);
-      const patientMap: Record<string, string> = {};
-      patients?.forEach(p => { patientMap[p.id] = p.patient_name; });
-
-      setAssets(assetData.map(a => ({
-        ...a,
-        patient_name: patientMap[a.case_id] || 'Unknown',
-      })));
+      let patientMap: Record<string, string> = {};
+      if (caseIds.length > 0) {
+        const { data: patients } = await supabase.from('patients').select('id, patient_name').in('id', caseIds);
+        patients?.forEach(p => { patientMap[p.id] = p.patient_name; });
+      }
+      assetData.forEach(a => {
+        allAssets.push({
+          id: a.id,
+          file_url: a.file_url,
+          file_type: a.file_type || 'application/octet-stream',
+          category: a.category || 'Other',
+          original_name: a.original_name || undefined,
+          is_viewable: a.is_viewable ?? true,
+          is_downloadable: a.is_downloadable ?? true,
+          created_at: a.created_at,
+          file_size: a.file_size || undefined,
+          patient_name: patientMap[a.case_id] || 'Unknown',
+          source: 'Asset',
+        });
+      });
     }
+
+    // 2. Fetch from plan_sections (file_url IS NOT NULL)
+    const { data: sections } = await supabase
+      .from('plan_sections')
+      .select('id, section_type, file_url, created_at, plan_id')
+      .not('file_url', 'is', null);
+
+    if (sections && sections.length > 0) {
+      const planIds = [...new Set(sections.map(s => s.plan_id))];
+      const { data: plans } = await supabase.from('treatment_plans').select('id, plan_name, phase_id').in('id', planIds);
+      const phaseIds = [...new Set((plans || []).map(p => p.phase_id))];
+      const { data: phases } = phaseIds.length > 0
+        ? await supabase.from('phases').select('id, patient_id, phase_name').in('id', phaseIds)
+        : { data: [] };
+      const patientIds = [...new Set((phases || []).map(p => p.patient_id))];
+      const { data: patients } = patientIds.length > 0
+        ? await supabase.from('patients').select('id, patient_name').in('id', patientIds)
+        : { data: [] };
+
+      const planMap: Record<string, any> = {};
+      (plans || []).forEach(p => { planMap[p.id] = p; });
+      const phaseMap: Record<string, any> = {};
+      (phases || []).forEach(p => { phaseMap[p.id] = p; });
+      const patMap: Record<string, string> = {};
+      (patients || []).forEach(p => { patMap[p.id] = p.patient_name; });
+
+      sections.forEach(s => {
+        if (!s.file_url) return;
+        const plan = planMap[s.plan_id];
+        const phase = plan ? phaseMap[plan.phase_id] : null;
+        const patName = phase ? patMap[phase.patient_id] : 'Unknown';
+        const ext = s.file_url.split('.').pop()?.toLowerCase() || '';
+        const ftype = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext) ? 'image/' + ext
+          : ['mp4', 'mov', 'webm'].includes(ext) ? 'video/' + ext
+          : ['stl'].includes(ext) ? 'model/stl'
+          : ['mp3', 'wav', 'ogg'].includes(ext) ? 'audio/' + ext
+          : 'application/octet-stream';
+
+        allAssets.push({
+          id: `section-${s.id}`,
+          file_url: s.file_url,
+          file_type: ftype,
+          category: 'Plan Section',
+          original_name: `${s.section_type} — ${plan?.plan_name || 'Plan'}`,
+          is_viewable: true,
+          is_downloadable: true,
+          created_at: s.created_at,
+          patient_name: patName,
+          source: 'Plan',
+          source_detail: `${phase?.phase_name || ''} → ${plan?.plan_name || ''}`,
+        });
+      });
+    }
+
+    // 3. Fetch from case_requests (attachments array)
+    const { data: caseReqs } = await supabase
+      .from('case_requests')
+      .select('id, patient_name, request_type, attachments, created_at')
+      .eq('is_deleted', false);
+
+    if (caseReqs) {
+      caseReqs.forEach(cr => {
+        const attachments = cr.attachments as any[];
+        if (!Array.isArray(attachments)) return;
+        attachments.forEach((att, idx) => {
+          if (!att.url) return;
+          allAssets.push({
+            id: `case-${cr.id}-${idx}`,
+            file_url: att.url,
+            file_type: att.type || 'application/octet-stream',
+            category: 'Case Attachment',
+            original_name: att.name || `Attachment ${idx + 1}`,
+            is_viewable: true,
+            is_downloadable: true,
+            created_at: cr.created_at,
+            file_size: att.size || undefined,
+            patient_name: cr.patient_name,
+            source: 'Case Request',
+            source_detail: cr.request_type,
+          });
+        });
+      });
+    }
+
+    // Sort all by date desc
+    allAssets.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    setAssets(allAssets);
     setLoading(false);
   };
 
@@ -70,19 +174,18 @@ export default function GlobalAssets() {
       result = result.filter(a =>
         (a.original_name || '').toLowerCase().includes(q) ||
         (a.patient_name || '').toLowerCase().includes(q) ||
-        a.category.toLowerCase().includes(q)
+        a.category.toLowerCase().includes(q) ||
+        (a.source_detail || '').toLowerCase().includes(q)
       );
     }
     if (filterCategory !== 'All') result = result.filter(a => a.category === filterCategory);
     return result;
   }, [assets, search, filterCategory, isAdmin]);
 
-  const toggleBulk = async (field: 'is_viewable' | 'is_downloadable', value: boolean) => {
-    const ids = filtered.map(a => a.id);
-    if (ids.length === 0) return;
-    await supabase.from('assets').update({ [field]: value }).in('id', ids);
-    setAssets(prev => prev.map(a => ids.includes(a.id) ? { ...a, [field]: value } : a));
-    toast.success(`Updated ${ids.length} assets`);
+  const sourceBadgeColor = (source: string) => {
+    if (source === 'Plan') return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400';
+    if (source === 'Case Request') return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400';
+    return 'bg-muted text-muted-foreground';
   };
 
   return (
@@ -92,20 +195,36 @@ export default function GlobalAssets() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search files, patients..." className="pl-9" value={search} onChange={e => setSearch(e.target.value)} />
+            <Input placeholder="Search files, patients, plans..." className="pl-9" value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           <Select value={filterCategory} onValueChange={setFilterCategory}>
-            <SelectTrigger className="w-32 h-9 text-xs"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-36 h-9 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
               {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
           </Select>
+          <div className="flex items-center border rounded-md overflow-hidden">
+            <Button variant={viewMode === 'grid' ? 'secondary' : 'ghost'} size="sm" className="h-8 rounded-none" onClick={() => setViewMode('grid')}><LayoutGrid className="w-3 h-3" /></Button>
+            <Button variant={viewMode === 'list' ? 'secondary' : 'ghost'} size="sm" className="h-8 rounded-none" onClick={() => setViewMode('list')}><List className="w-3 h-3" /></Button>
+          </div>
           {isAdmin && (
             <div className="flex gap-1">
-              <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => toggleBulk('is_viewable', true)}>
+              <Button variant="outline" size="sm" className="text-xs h-8" onClick={async () => {
+                const ids = filtered.filter(a => a.id.startsWith('section-') || a.id.startsWith('case-') ? false : true).map(a => a.id);
+                if (ids.length === 0) return;
+                await supabase.from('assets').update({ is_viewable: true }).in('id', ids);
+                setAssets(prev => prev.map(a => ids.includes(a.id) ? { ...a, is_viewable: true } : a));
+                toast.success(`Updated ${ids.length} assets`);
+              }}>
                 <Eye className="w-3 h-3 mr-1" /> All Viewable
               </Button>
-              <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => toggleBulk('is_downloadable', true)}>
+              <Button variant="outline" size="sm" className="text-xs h-8" onClick={async () => {
+                const ids = filtered.filter(a => !a.id.startsWith('section-') && !a.id.startsWith('case-')).map(a => a.id);
+                if (ids.length === 0) return;
+                await supabase.from('assets').update({ is_downloadable: true }).in('id', ids);
+                setAssets(prev => prev.map(a => ids.includes(a.id) ? { ...a, is_downloadable: true } : a));
+                toast.success(`Updated ${ids.length} assets`);
+              }}>
                 <Download className="w-3 h-3 mr-1" /> All DL
               </Button>
             </div>
@@ -121,7 +240,7 @@ export default function GlobalAssets() {
             <FileText className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
             <p className="text-muted-foreground">No assets found</p>
           </Card>
-        ) : (
+        ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filtered.map(asset => (
               <Card key={asset.id} className="overflow-hidden group hover:shadow-md transition-shadow">
@@ -153,25 +272,45 @@ export default function GlobalAssets() {
                     <span className="text-[10px] text-muted-foreground">{asset.patient_name}</span>
                     <Badge variant="outline" className="text-[9px]">{asset.category}</Badge>
                   </div>
+                  <div className="flex flex-wrap gap-1">
+                    <Badge className={`text-[9px] ${sourceBadgeColor(asset.source)}`}>{asset.source}</Badge>
+                    {asset.source_detail && <Badge variant="outline" className="text-[9px]">{asset.source_detail}</Badge>}
+                  </div>
                   <p className="text-[10px] text-muted-foreground">{format(new Date(asset.created_at), 'MMM d, yyyy')}</p>
-                  {isAdmin && (
-                    <div className="flex items-center gap-3 pt-1">
-                      <label className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer">
-                        <input type="checkbox" checked={asset.is_viewable} onChange={async (e) => {
-                          const val = e.target.checked;
-                          await supabase.from('assets').update({ is_viewable: val }).eq('id', asset.id);
-                          setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, is_viewable: val } : a));
-                        }} className="w-3 h-3" /> View
-                      </label>
-                      <label className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer">
-                        <input type="checkbox" checked={asset.is_downloadable} onChange={async (e) => {
-                          const val = e.target.checked;
-                          await supabase.from('assets').update({ is_downloadable: val }).eq('id', asset.id);
-                          setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, is_downloadable: val } : a));
-                        }} className="w-3 h-3" /> DL
-                      </label>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {filtered.map(asset => (
+              <Card key={asset.id} className="hover:shadow-md transition-shadow">
+                <CardContent className="p-3 flex items-center gap-3">
+                  <div className="w-10 h-10 bg-muted/30 rounded flex items-center justify-center shrink-0 cursor-pointer"
+                    onClick={() => setPreviewFile({
+                      name: asset.original_name || asset.category,
+                      url: asset.file_url,
+                      type: asset.file_type,
+                      size: asset.file_size || 0,
+                    })}>
+                    {asset.file_type.startsWith('image') ? (
+                      <img src={asset.file_url} alt="" className="w-full h-full object-cover rounded" />
+                    ) : asset.file_type.startsWith('video') ? (
+                      <Film className="w-4 h-4 text-muted-foreground" />
+                    ) : (
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium truncate">{asset.original_name || asset.category}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] text-muted-foreground">{asset.patient_name}</span>
+                      <Badge className={`text-[9px] ${sourceBadgeColor(asset.source)}`}>{asset.source}</Badge>
+                      {asset.source_detail && <Badge variant="outline" className="text-[9px]">{asset.source_detail}</Badge>}
+                      <span className="text-[10px] text-muted-foreground">{format(new Date(asset.created_at), 'MMM d, yyyy')}</span>
                     </div>
-                  )}
+                  </div>
+                  <Badge variant="outline" className="text-[9px] shrink-0">{asset.category}</Badge>
                 </CardContent>
               </Card>
             ))}
