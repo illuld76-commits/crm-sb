@@ -439,7 +439,18 @@ export default function PresetForms() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1"><Label className="text-xs">Plan Preset Name *</Label><Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Orthodontic Plan" /></div>
-                  <div className="space-y-1"><Label className="text-xs">Linked Work Order Type</Label><Input value={newDescription} onChange={e => setNewDescription(e.target.value)} placeholder="e.g. Standard Aligner" /></div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Linked Work Order Type</Label>
+                    <Select value={newUnit || ''} onValueChange={setNewUnit}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select work order..." /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {presets.filter(p => p.category === 'work_order').map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 {/* Quick-add section types */}
