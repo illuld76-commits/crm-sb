@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useUserScope } from '@/hooks/useUserScope';
 import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
 import CommunicationHub from '@/components/CommunicationHub';
@@ -25,6 +26,7 @@ interface ConversationItem {
 
 export default function Messages() {
   const { user } = useAuth();
+  const { canAccessPatient, isAdmin, loading: scopeLoading } = useUserScope();
   const navigate = useNavigate();
   const { openPreview } = useRelationalNav();
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
@@ -35,8 +37,8 @@ export default function Messages() {
   const [readConvKeys, setReadConvKeys] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    fetchConversations();
-  }, []);
+    if (!scopeLoading) fetchConversations();
+  }, [scopeLoading]);
 
   const fetchConversations = async () => {
     // Get distinct conversations from communications
@@ -48,15 +50,22 @@ export default function Messages() {
 
     if (!comms) { setLoading(false); return; }
 
-    // Get unique case_ids
+    // Get unique case_ids and filter by RBAC scope
     const caseIds = [...new Set(comms.map(c => c.case_id))];
-    const { data: patients } = await supabase.from('patients').select('id, patient_name').in('id', caseIds);
+    const { data: patients } = await supabase.from('patients').select('id, patient_name, clinic_name, doctor_name, lab_name, company_name, user_id, primary_user_id, secondary_user_id').in('id', caseIds);
+    
+    // RBAC: filter patients user can access
+    const scopedPatients = isAdmin ? (patients || []) : (patients || []).filter(p => canAccessPatient(p));
+    const scopedPatientIds = new Set(scopedPatients.map(p => p.id));
     const patientMap: Record<string, string> = {};
-    patients?.forEach(p => { patientMap[p.id] = p.patient_name; });
+    scopedPatients.forEach(p => { patientMap[p.id] = p.patient_name; });
+    
+    // Filter comms to only scoped patients
+    const scopedComms = comms.filter(c => scopedPatientIds.has(c.case_id));
 
     // Group by case_id + related_id with unread tracking
     const convMap = new Map<string, ConversationItem>();
-    comms.forEach(c => {
+    scopedComms.forEach(c => {
       const key = `${c.case_id}-${c.related_id || 'case'}`;
       if (!convMap.has(key)) {
         convMap.set(key, {
@@ -83,7 +92,7 @@ export default function Messages() {
           const conv = convMap.get(k);
           if (conv) {
             // Count messages after last read
-            const unreadMsgs = comms.filter(c => {
+            const unreadMsgs = scopedComms.filter(c => {
               const ck = `${c.case_id}-${c.related_id || 'case'}`;
               return ck === k && new Date(c.created_at) > new Date(lastReadAt);
             });
@@ -95,7 +104,7 @@ export default function Messages() {
         convMap.forEach((conv, key) => {
           if (!readKeys.has(key)) {
             conv.unread = true;
-            conv.unread_count = comms.filter(c => `${c.case_id}-${c.related_id || 'case'}` === key).length;
+            conv.unread_count = scopedComms.filter(c => `${c.case_id}-${c.related_id || 'case'}` === key).length;
           }
         });
       } else {
