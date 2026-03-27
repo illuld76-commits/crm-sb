@@ -226,25 +226,40 @@ export type Database = {
       }
       email_templates: {
         Row: {
+          body: string | null
           body_template: string
           created_at: string
           event_type: string
           id: string
+          is_active: boolean | null
+          name: string | null
+          subject: string | null
           subject_template: string
+          trigger_event: string | null
         }
         Insert: {
+          body?: string | null
           body_template: string
           created_at?: string
           event_type: string
           id?: string
+          is_active?: boolean | null
+          name?: string | null
+          subject?: string | null
           subject_template: string
+          trigger_event?: string | null
         }
         Update: {
+          body?: string | null
           body_template?: string
           created_at?: string
           event_type?: string
           id?: string
+          is_active?: boolean | null
+          name?: string | null
+          subject?: string | null
           subject_template?: string
+          trigger_event?: string | null
         }
         Relationships: []
       }
@@ -406,6 +421,7 @@ export type Database = {
           created_at: string
           event_type: string
           id: string
+          is_email_enabled: boolean | null
           title_template: string
         }
         Insert: {
@@ -413,6 +429,7 @@ export type Database = {
           created_at?: string
           event_type: string
           id?: string
+          is_email_enabled?: boolean | null
           title_template: string
         }
         Update: {
@@ -420,6 +437,7 @@ export type Database = {
           created_at?: string
           event_type?: string
           id?: string
+          is_email_enabled?: boolean | null
           title_template?: string
         }
         Relationships: []
@@ -655,6 +673,7 @@ export type Database = {
           type: string | null
           unit: string | null
           unit_price: number | null
+          user_id: string | null
         }
         Insert: {
           category?: string | null
@@ -670,6 +689,7 @@ export type Database = {
           type?: string | null
           unit?: string | null
           unit_price?: number | null
+          user_id?: string | null
         }
         Update: {
           category?: string | null
@@ -685,23 +705,27 @@ export type Database = {
           type?: string | null
           unit?: string | null
           unit_price?: number | null
+          user_id?: string | null
         }
         Relationships: []
       }
       profiles: {
         Row: {
+          clinic_name: string | null
           created_at: string
           display_name: string | null
           password_hint: string | null
           user_id: string
         }
         Insert: {
+          clinic_name?: string | null
           created_at?: string
           display_name?: string | null
           password_hint?: string | null
           user_id: string
         }
         Update: {
+          clinic_name?: string | null
           created_at?: string
           display_name?: string | null
           password_hint?: string | null
@@ -789,6 +813,7 @@ export type Database = {
           entity_type: string
           gst_number: string | null
           id: string
+          is_deleted: boolean | null
           notes: string | null
           phone: string | null
           state: string | null
@@ -804,6 +829,7 @@ export type Database = {
           entity_type: string
           gst_number?: string | null
           id?: string
+          is_deleted?: boolean | null
           notes?: string | null
           phone?: string | null
           state?: string | null
@@ -819,6 +845,7 @@ export type Database = {
           entity_type?: string
           gst_number?: string | null
           id?: string
+          is_deleted?: boolean | null
           notes?: string | null
           phone?: string | null
           state?: string | null
