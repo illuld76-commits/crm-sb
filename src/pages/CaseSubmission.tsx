@@ -331,7 +331,7 @@ export default function CaseSubmission() {
                   </p>
                   {caseData.patient_id && (
                     <Button variant="link" size="sm" className="h-auto p-0 text-xs text-primary" onClick={() => navigate(`/patient/${caseData.patient_id}`)}>
-                      View linked patient →
+                      View linked project →
                     </Button>
                   )}
                 </div>
@@ -370,6 +370,12 @@ export default function CaseSubmission() {
                     )}
                     {!caseData.patient_id && ['accepted', 'in_progress', 'completed'].includes(caseData.status) && (
                       <Button size="sm" variant="outline" className="text-primary" onClick={async () => {
+                        const requestTypeName = caseData.request_type;
+                        const reqTypePreset = presets.find(p => p.category === 'request_type' && p.name === requestTypeName);
+                        const planPresetId = reqTypePreset?.description;
+                        const planPreset = planPresetId ? presets.find(p => p.id === planPresetId) : null;
+                        const planName = planPreset ? planPreset.name : requestTypeName || 'Treatment Plan';
+
                         const { data: newPatient, error } = await supabase.from('patients').insert({
                           patient_name: caseData.patient_name,
                           patient_age: caseData.patient_age,
@@ -380,13 +386,23 @@ export default function CaseSubmission() {
                           lab_name: caseData.lab_name || null,
                         }).select('id').single();
                         if (!error && newPatient) {
-                          await supabase.from('phases').insert({ patient_id: newPatient.id, phase_name: 'Initial Treatment', phase_order: 0 });
+                          const { data: newPhase } = await supabase.from('phases').insert({ patient_id: newPatient.id, phase_name: caseData.patient_name, phase_order: 0 }).select('id').single();
+                          if (newPhase) {
+                            await supabase.from('treatment_plans').insert({
+                              phase_id: newPhase.id,
+                              plan_name: planName,
+                              plan_date: new Date().toISOString().split('T')[0],
+                              notes: `Auto-created from case request: ${requestTypeName}`,
+                              status: 'draft',
+                              case_request_id: id,
+                            });
+                          }
                           await supabase.from('case_requests').update({ patient_id: newPatient.id }).eq('id', id);
-                          toast.success('Patient case created');
+                          toast.success('Project created with phase and plan');
                           navigate(`/patient/${newPatient.id}`);
-                        } else { toast.error('Failed to create case'); }
+                        } else { toast.error('Failed to create project'); }
                       }}>
-                        <UserPlus className="w-3.5 h-3.5 mr-1" /> Convert to Case
+                        <UserPlus className="w-3.5 h-3.5 mr-1" /> Convert to Project
                       </Button>
                     )}
                     <Button size="sm" variant="outline" className="text-destructive" onClick={async () => {
