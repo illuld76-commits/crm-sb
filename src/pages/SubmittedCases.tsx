@@ -233,6 +233,41 @@ export default function SubmittedCases() {
               </Card>
             ))}
           </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filtered.map(c => (
+              <Card key={c.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate(`/case-submission/${c.id}`)}>
+                <CardContent className="p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-sm truncate">{c.patient_name}</span>
+                    {statusBadge(c.status)}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{c.request_type}</p>
+                  <p className="text-[10px] text-muted-foreground">{format(new Date(c.created_at), 'MMM d, yyyy')}</p>
+                  {c.attachments && c.attachments.length > 0 && (
+                    <p className="text-[10px] text-muted-foreground">{c.attachments.length} file{c.attachments.length !== 1 ? 's' : ''}</p>
+                  )}
+                  <div className="flex items-center gap-1 pt-1">
+                    {isAdmin && c.status === 'pending' && (
+                      <>
+                        <Button variant="ghost" size="sm" className="text-green-600 h-7" onClick={e => { e.stopPropagation(); updateStatus(c.id, 'accepted'); }}>
+                          <CheckCircle2 className="w-3 h-3" />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-destructive h-7" onClick={e => { e.stopPropagation(); updateStatus(c.id, 'rejected'); }}>
+                          <XCircle className="w-3 h-3" />
+                        </Button>
+                      </>
+                    )}
+                    {(c as any).patient_id && (
+                      <Badge variant="outline" className="text-[10px] cursor-pointer hover:bg-accent" onClick={e => { e.stopPropagation(); navigate(`/patient/${(c as any).patient_id}`); }}>
+                        👤 Linked
+                      </Badge>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         )}
       </main>
     </div>
