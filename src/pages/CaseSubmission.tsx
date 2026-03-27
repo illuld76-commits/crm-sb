@@ -219,7 +219,7 @@ export default function CaseSubmission() {
   };
 
   const updateStatus = async (newStatus: CaseRequest['status']) => {
-    if (!id || !user) return;
+    if (!id || !user || !caseData) return;
     const historyEntry = {
       id: crypto.randomUUID(),
       action: `Status changed to ${newStatus}`,
@@ -228,76 +228,17 @@ export default function CaseSubmission() {
     };
     const currentHistory = (caseData?.history || []) as any[];
 
-    // If accepting and no patient linked, create one automatically
-    let patientIdToLink = caseData?.patient_id || selectedPatientId;
+    // If accepting, use shared conversion utility
+    let patientIdToLink = caseData.patient_id || selectedPatientId;
     if (newStatus === 'accepted') {
-      const requestTypeName = caseData!.request_type;
-      const reqTypePreset = presets.find(p => p.category === 'request_type' && p.name === requestTypeName);
-      const planPresetId = reqTypePreset?.description;
-      const planPreset = planPresetId ? presets.find(p => p.id === planPresetId) : null;
-      const planName = planPreset ? planPreset.name : requestTypeName || 'Treatment Plan';
-      const caseName = caseData!.patient_name;
-
-      if (!patientIdToLink) {
-        // Create NEW patient
-        const { data: newPatient, error: patientErr } = await supabase.from('patients').insert({
-          patient_name: caseData!.patient_name,
-          patient_age: caseData!.patient_age,
-          patient_sex: caseData!.patient_sex,
-          user_id: caseData!.user_id,
-          clinic_name: caseData!.clinic_name || null,
-          doctor_name: caseData!.doctor_name || null,
-          lab_name: caseData!.lab_name || null,
-        }).select('id').single();
-        if (!patientErr && newPatient) {
-          patientIdToLink = newPatient.id;
-        }
-      }
-
-      if (patientIdToLink) {
-        // Create phase named after the case request
-        const { data: existingPhases } = await supabase.from('phases').select('phase_order').eq('patient_id', patientIdToLink).order('phase_order', { ascending: false }).limit(1);
-        const nextOrder = (existingPhases?.[0]?.phase_order ?? -1) + 1;
-        const { data: newPhase } = await supabase.from('phases').insert({
-          patient_id: patientIdToLink,
-          phase_name: caseName,
-          phase_order: nextOrder,
-        }).select('id').single();
-
-        // Create plan named after the request type, store preset info in notes
-        if (newPhase) {
-          const notesJson = JSON.stringify({
-            source: 'case_request',
-            case_request_id: id,
-            request_type: requestTypeName,
-            plan_preset_id: planPresetId || null,
-          });
-          await supabase.from('treatment_plans').insert({
-            phase_id: newPhase.id,
-            plan_name: planName,
-            plan_date: new Date().toISOString().split('T')[0],
-            notes: notesJson,
-            status: 'draft',
-          } as any);
-        }
-
-        // Copy case request attachments to assets table
-        const caseAttachments = caseData!.attachments || [];
-        if (caseAttachments.length > 0) {
-          const assetInserts = caseAttachments.map((att: any) => ({
-            case_id: patientIdToLink!,
-            file_url: att.url,
-            file_type: att.type || 'application/octet-stream',
-            original_name: att.name,
-            category: 'case_request_attachment',
-            is_viewable: true,
-            is_downloadable: true,
-          }));
-          await supabase.from('assets').insert(assetInserts);
-        }
-
-        toast.success('Project, phase, and plan created');
-        navigate(`/patient/${patientIdToLink}`);
+      const result = await convertCaseToProject(caseData, presets, user.id);
+      if (result) {
+        patientIdToLink = result.patientId;
+        toast.success('Project, phase, plan, and draft invoice created');
+        navigate(`/patient/${result.patientId}`);
+      } else {
+        toast.error('Failed to convert case to project');
+        return;
       }
     }
 
@@ -308,9 +249,8 @@ export default function CaseSubmission() {
     }).eq('id', id);
     if (!error) {
       setCaseData(prev => prev ? { ...prev, status: newStatus, patient_id: patientIdToLink || undefined, history: [...currentHistory, historyEntry] } : prev);
-      toast.success(`Case ${newStatus.replace('_', ' ')}`);
+      if (newStatus !== 'accepted') toast.success(`Case ${newStatus.replace('_', ' ')}`);
 
-      // Log action
       await logAction({
         action: `Case ${newStatus.replace('_', ' ')}`, target_type: 'case_request',
         target_id: id, target_name: caseData?.patient_name || '',
@@ -319,7 +259,6 @@ export default function CaseSubmission() {
         old_value: caseData?.status, new_value: newStatus,
       });
 
-      // Send notification to case owner
       if (caseData?.user_id && caseData.user_id !== user.id) {
         await sendNotification({
           userId: caseData.user_id,
