@@ -18,6 +18,11 @@ export async function convertCaseToProject(
   presets: Preset[],
   currentUserId: string,
 ): Promise<ConversionResult | null> {
+  // Idempotency: prevent double conversion
+  if ((caseReq as any).converted_at) {
+    return null;
+  }
+
   let patientId = caseReq.patient_id || null;
 
   // 1. Create patient if not linked
@@ -110,26 +115,36 @@ export async function convertCaseToProject(
     if (plan) planIds.push(plan.id);
   }
 
-  // 5. Copy attachments to assets
+  // 5. Copy attachments to assets (deduplicate by file_url)
   const caseAttachments = caseReq.attachments || [];
   if (caseAttachments.length > 0) {
-    const assetInserts = caseAttachments.map((att: any) => ({
-      case_id: patientId!,
-      file_url: att.url,
-      file_type: att.type || 'application/octet-stream',
-      original_name: att.name,
-      category: 'case_request_attachment',
-      is_viewable: true,
-      is_downloadable: true,
-    }));
-    await supabase.from('assets').insert(assetInserts);
+    const urls = caseAttachments.map((att: any) => att.url).filter(Boolean);
+    const { data: existingAssets } = await supabase.from('assets')
+      .select('file_url')
+      .eq('case_id', patientId!)
+      .in('file_url', urls);
+    const existingUrls = new Set((existingAssets || []).map(a => a.file_url));
+    const newAttachments = caseAttachments.filter((att: any) => att.url && !existingUrls.has(att.url));
+    if (newAttachments.length > 0) {
+      const assetInserts = newAttachments.map((att: any) => ({
+        case_id: patientId!,
+        file_url: att.url,
+        file_type: att.type || 'application/octet-stream',
+        original_name: att.name,
+        category: 'case_request_attachment',
+        is_viewable: true,
+        is_downloadable: true,
+      }));
+      await supabase.from('assets').insert(assetInserts);
+    }
   }
 
-  // 6. Link case request to patient
+  // 6. Link case request to patient and mark as converted
   await supabase.from('case_requests').update({
     patient_id: patientId,
     status: 'accepted',
-  }).eq('id', caseReq.id);
+    converted_at: new Date().toISOString(),
+  } as any).eq('id', caseReq.id);
 
   // 7. Create draft invoice from request_items
   let invoiceId: string | undefined;

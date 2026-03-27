@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Search, ChevronRight, PanelLeftClose, PanelLeftOpen, LayoutGrid, X, FilePlus, Archive, Settings as SettingsIcon, Bell, User, History, CreditCard, UserCog, Columns3, LogOut, MessageSquare, FolderOpen, Inbox, Briefcase } from 'lucide-react';
+import { Search, ChevronRight, PanelLeftClose, PanelLeftOpen, LayoutGrid, X, FilePlus, Archive, Settings as SettingsIcon, Bell, User, History, CreditCard, UserCog, Columns3, LogOut, MessageSquare, FolderOpen, Inbox, Briefcase, FileText, Receipt, DollarSign } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
@@ -71,7 +71,7 @@ export default function Sidebar({ patients, phases, plans, caseRequests, onClose
     { to: '/messages', icon: MessageSquare, label: 'Messages', show: true },
     { to: '/notifications', icon: Bell, label: 'Notifications', show: true },
     { to: '/profile', icon: User, label: 'My Profile', show: true },
-    { to: '/billing', icon: CreditCard, label: 'Billing', show: true },
+    
     { to: '/assets', icon: FolderOpen, label: 'Global Assets', show: true },
     { to: '/audit-logs', icon: History, label: 'Activity Logs', show: true },
   ];
