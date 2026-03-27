@@ -1,171 +1,88 @@
 
-Goal: fix the three broken areas without regressing working modules, and align the case lifecycle with the intended relational workflow: Case Request → Project (Patient) → Phase → Plan → Publish → Billing.
 
-1. Confirmed root causes from the current code
+# Fix Billing, Assets, CRM Auto-Population, Navigation & Edge Function
 
-- CRM Contacts cannot add clinics/labs/doctors/companies
-  - `src/pages/Settings.tsx` inserts `user_id` into `settings_entities`, but the table has no `user_id` column.
-  - The page also hard-deletes records, while the table already supports `is_deleted` soft delete.
-  - Result: add/delete actions can fail or behave inconsistently.
+## Issues Identified
 
-- Dental chart range selection is unreliable
-  - `ToothChartSelector.tsx` uses a brittle shift-click implementation tied to `onClick` and a single `lastClickedTooth` anchor.
-  - It needs deterministic range-anchor logic per arch and safer event handling for SVG interaction.
+1. **Asset duplication on conversion**: `case-conversion.ts` line 113-126 always inserts attachments without checking if they already exist as assets for that patient. Converting the same request twice (or if attachments were already copied elsewhere) creates duplicates.
 
-- Case request flow is incomplete and partly misleading
-  - `CaseSubmission.tsx` only supports a single `request_type` string even though the UI state hints at multi-item/request support.
-  - It does not capture the required “request name + request type + qty + billing linkage” flow.
-  - It does not check Supabase insert/update errors before showing success and navigating away.
-  - Conversion logic is duplicated in two places, and the list-page conversion is much weaker than the detail-page conversion.
-  - `SubmittedCases.tsx` list visibility is too narrow for non-admin users (`user_id` only), so related users may not see relevant requests.
-  - Conversion from request to project/phase/plan is not consistently triggered from the main review flow.
+2. **Invoice primary user not auto-populated from assignee selection**: The invoice form shows a raw user dropdown but doesn't auto-populate from the patient's assigned entity (company/clinic/lab/doctor). The `clientDetails` gets CRM entity data but `primaryUserId` only copies from `patients.primary_user_id` which may be null.
 
-2. Implementation phases
+3. **create-user edge function error**: `auth.getClaims()` is not a valid Supabase JS v2 method — it should use `auth.getUser()` to verify the caller.
 
-Phase A — Stabilize data writes and visibility
-- Fix `Settings.tsx`
-  - remove invalid `user_id` field from inserts
-  - switch delete to soft delete via `is_deleted = true`
-  - only fetch non-deleted entities
-  - surface backend errors properly
-- Fix `CaseSubmission.tsx`
-  - check every insert/update/upload result and stop on failure
-  - only show success after confirmed persistence
-  - ensure submitted requests always appear in `SubmittedCases` and sidebar panes
-- Fix `SubmittedCases.tsx` and sidebar data loading
-  - use RBAC-aware filtering instead of `user_id` only
-  - include owner/assignment/company-first visibility rules
+4. **Billing navigation**: Sidebar has a single "Billing" link. User wants expandable sub-navigation: Invoices, Expenses, Receipts.
 
-Phase B — Rebuild the case request model around your real workflow
-- Extend case request structure to support:
-  - `request_name`
-  - linked existing patient or new patient creation path
-  - one or more request items with:
-    - request type
-    - qty
-    - linked preset/item pricing snapshot
-- Preserve current preset engine and reuse it instead of replacing it.
-- Add a structured request payload so billing can be created from the request itself, not guessed later.
+5. **Expenses not standalone**: Currently expenses are tied to an invoice (`invoice_id`). User wants standalone expenses assignable to a user or invoice.
 
-Target flow:
-```text
-Case Request
-  ├─ request_name
-  ├─ patient = existing patient OR new project/patient details
-  ├─ request_items[]
-  │    ├─ request_type
-  │    ├─ qty
-  │    ├─ rate snapshot
-  │    └─ linked preset ids
-  ├─ work order dynamic form data
-  └─ attachments
-        ↓
-Convert / Accept
-        ↓
-Project (Patient)
-  └─ Phase named from request
-       └─ Plan(s) created from linked presets
-            ↓
-Billing draft created from request_items
+6. **Receipts not a standalone section**: Receipts are only viewable inside an invoice detail. Need a dedicated receipts list.
+
+7. **CRM auto-population incomplete**: When a project is assigned to a company/lab/clinic, the contact person from `settings_entities` should become the primary contact on the invoice, not require manual email entry.
+
+## Implementation Plan
+
+### Step 1: Fix asset duplication in case-conversion.ts
+- Before inserting assets, check if assets with the same `file_url` and `case_id` already exist
+- Skip duplicates using a `SELECT` query or `ON CONFLICT` approach
+- Add idempotency: mark case_request with a `converted_at` timestamp to prevent double conversion
+
+### Step 2: Fix create-user edge function
+- Replace `auth.getClaims()` with `auth.getUser()` to get caller identity
+- The caller's user ID comes from `data.user.id` instead of `claims.sub`
+
+### Step 3: Invoice assignee auto-population from CRM
+- When a patient is selected in Billing.tsx, look up the patient's `clinic_name`, `lab_name`, `company_name`, `doctor_name`
+- Query `settings_entities` for the matching entity and use its `contact_person` + `email` as the primary client contact
+- Auto-set `primaryUserId` by finding the user whose `user_assignments` match the entity
+- Add a "Primary Contact" dropdown that shows entity contacts (from CRM) instead of requiring manual email
+- When entity type is company/lab/clinic, auto-fill from `settings_entities.contact_person`, `email`, `address`
+
+### Step 4: Expand billing navigation in Sidebar
+- Replace single "Billing" link with expandable section containing:
+  - Invoices (`/billing`)
+  - Expenses (`/billing/expenses`)  
+  - Receipts (`/billing/receipts`)
+
+### Step 5: Standalone expenses page
+- Create `/billing/expenses` route and `ExpensesList.tsx` page
+- List all expenses (admin sees all, non-admin sees own)
+- Allow creating expenses without an invoice (optional `invoice_id`)
+- Add `user_id` column to expenses table if not present for assignment
+- Admin can assign expense to any user; non-admin creates own
+
+### Step 6: Standalone receipts page
+- Create `/billing/receipts` route and `ReceiptsList.tsx` page
+- List all receipts across all invoices
+- Show linked invoice number, patient, amount, date, method
+- RBAC: admin sees all, non-admin sees receipts from their invoices
+
+### Step 7: Invoice mobile responsiveness
+- Line items grid: switch from 12-col grid to stacked card layout on mobile
+- Show description, qty, rate, amount on mobile; hide HSN, disc%, GST% behind expandable
+- Ensure all form fields are touch-friendly with adequate height
+
+## Database Changes
+
+**Migration:**
+```sql
+-- Add user_id to expenses for standalone expense assignment
+-- (expenses table already has no user_id column per schema)
+ALTER TABLE public.expenses ADD COLUMN IF NOT EXISTS user_id uuid;
+ALTER TABLE public.expenses ADD COLUMN IF NOT EXISTS patient_id uuid;
+
+-- Add converted_at to case_requests to prevent double conversion
+ALTER TABLE public.case_requests ADD COLUMN IF NOT EXISTS converted_at timestamptz;
 ```
 
-Phase C — Make request conversion authoritative and reusable
-- Create one shared conversion path used by:
-  - case detail review screen
-  - submitted cases list actions
-  - any future approval action
-- Conversion responsibilities:
-  - create patient if missing, or attach to selected existing patient
-  - create phase named from request
-  - create linked treatment plan(s) from request type presets
-  - copy request attachments into central assets
-  - persist relation ids back on `case_requests`
-  - generate draft billing rows from request item qty/rate snapshot
-- Remove duplicated conversion logic between `CaseSubmission.tsx` and `SubmittedCases.tsx`.
+## Files to Create/Modify
 
-Phase D — RBAC and company-first corrections
-- Update case request visibility using existing company-first utilities:
-  - admins: all
-  - non-admins: own requests, linked patient owners, assigned users, and company peers where relevant
-- Reuse this consistently in:
-  - case request list
-  - patient dropdown search
-  - conversion target selection
-  - downstream project visibility
-- Keep admin assignment unrestricted; non-admin assignment remains peer/admin scoped.
+| File | Action |
+|------|--------|
+| `src/lib/case-conversion.ts` | Fix asset duplication, add converted_at check |
+| `supabase/functions/create-user/index.ts` | Fix auth.getClaims → auth.getUser |
+| `src/pages/Billing.tsx` | CRM auto-population for assignee, mobile layout |
+| `src/components/Sidebar.tsx` | Expand billing to sub-sections |
+| `src/pages/ExpensesList.tsx` | New standalone expenses page |
+| `src/pages/ReceiptsList.tsx` | New standalone receipts page |
+| `src/App.tsx` | Add routes for expenses/receipts |
+| Migration | Add user_id/patient_id to expenses, converted_at to case_requests |
 
-Phase E — Dental chart reliability fix
-- Replace current shift-select behavior with:
-  - explicit anchor tooth tracking
-  - arch identity comparison by membership, not fragile reference behavior
-  - `onMouseDown`/pointer-safe handling for SVG teeth
-  - optional deselect-range logic that mirrors normal multi-select expectations
-- Preserve existing permanent/deciduous chart, legend, and read-only rendering.
-
-Phase F — Billing linkage and project continuity
-- When a request is submitted, store billing-relevant request items immediately.
-- When converted/accepted:
-  - create or update draft invoice from stored request items and qty
-  - keep invoice editable later
-  - continue CRM auto-population for clinic/doctor/lab/company details
-- Ensure future plan approval/publish can still modify billing without losing the original request snapshot.
-
-3. Database changes required
-
-Use schema migrations for structure only:
-- `case_requests`
-  - add `request_name`
-  - add structured request items field (jsonb) for request type + qty + pricing snapshot
-  - add ownership fields if missing for better downstream visibility
-- potentially normalize secondary ownership where current schema is too limited (`patients.secondary_user_id` is singular while invoice logic already expects plural patterns elsewhere)
-- add any needed indexes for request lookup and conversion queries
-
-Data safety/RLS review:
-- keep PII tables protected
-- tighten broad `USING (true)` policies later, but first make the broken flows functional
-- ensure all request/project/billing tables remain usable for authenticated users under company-first visibility
-
-4. Files to update
-
-- `src/pages/Settings.tsx`
-- `src/components/ToothChartSelector.tsx`
-- `src/pages/CaseSubmission.tsx`
-- `src/pages/SubmittedCases.tsx`
-- `src/components/Sidebar.tsx`
-- `src/pages/PatientDetail.tsx`
-- `src/pages/Billing.tsx`
-- `src/hooks/useUserScope.tsx`
-- `src/lib/access-control.ts`
-- shared conversion utility to centralize request→project creation
-- one new migration for request model improvements and any ownership normalization
-
-5. QA checklist to prevent another broken cycle
-
-- CRM Contacts
-  - add/edit/delete clinic, doctor, lab, company
-  - verify records reappear correctly and soft delete works
-- Dental chart
-  - single click, shift-range in upper/lower/permanent/deciduous
-  - add selection, remove selection, read-only display
-- Case request
-  - new patient flow
-  - existing patient search with RBAC and live search
-  - request name + request type + qty + attachments save correctly
-  - failed save shows error and does not navigate
-- Request list and conversion
-  - request visible after submit
-  - admin can accept and convert from both detail and list views
-  - project/phase/plan created exactly once
-- Billing
-  - draft invoice created from request items with qty
-  - CRM details auto-filled
-  - invoice still editable afterward
-- RBAC
-  - admin sees all
-  - non-admin sees only allowed patients/requests/assignees/company peers
-
-6. Technical notes
-
-- Biggest immediate bug: success toasts/navigation currently happen even if request persistence fails.
-- Biggest structural gap: the current `case_requests` model does not actually represent your intended work-order + qty + billing workflow.
-- Best implementation strategy: fix writes first, then unify conversion, then layer the richer request/billing model on top so existing modules keep working while the flow becomes reliable.
