@@ -124,21 +124,60 @@ export default function PlanEditor() {
   }, [id, phaseIdParam]);
 
   const autoLoadPresetFromPhase = async (pId: string) => {
-    // Check if phase was created from a case request by finding a plan with case_request_id
-    const { data: existingPlans } = await (supabase.from('treatment_plans').select('*') as any).eq('phase_id', pId).not('case_request_id', 'is', null).limit(1);
-    if (existingPlans && existingPlans.length > 0) {
-      const crId = (existingPlans[0] as any).case_request_id;
-      const { data: caseReq } = await supabase.from('case_requests').select('request_type').eq('id', crId).single();
-      if (caseReq) {
-        // Find the request type preset and its linked plan preset
+    // Find plans under this phase and check notes for case_request source info
+    const { data: existingPlans } = await supabase.from('treatment_plans').select('notes').eq('phase_id', pId).limit(5);
+    if (existingPlans) {
+      for (const plan of existingPlans) {
+        try {
+          const meta = JSON.parse(plan.notes || '{}');
+          if (meta.source === 'case_request' && meta.plan_preset_id) {
+            // Load the plan preset directly
+            const { data: allPresets } = await supabase.from('presets').select('id, name, fields').eq('category', 'plan_preset');
+            const linkedPreset = allPresets?.find(p => p.id === meta.plan_preset_id);
+            if (linkedPreset) {
+              setPlanName(meta.request_type || 'Treatment Plan');
+              setSelectedPresetId(linkedPreset.id);
+              applyPresetSections(linkedPreset.fields as any[] || []);
+              return;
+            }
+          }
+          // Fallback: look up case request by ID and find request type → plan preset chain
+          if (meta.source === 'case_request' && meta.case_request_id) {
+            const { data: caseReq } = await supabase.from('case_requests').select('request_type').eq('id', meta.case_request_id).single();
+            if (caseReq) {
+              const { data: allPresets } = await supabase.from('presets').select('id, name, description, category, fields').in('category', ['request_type', 'plan_preset']);
+              if (allPresets) {
+                const reqType = allPresets.find(p => p.category === 'request_type' && p.name === caseReq.request_type);
+                const linkedPresetId = reqType?.description;
+                if (linkedPresetId) {
+                  const linkedPreset = allPresets.find(p => p.id === linkedPresetId);
+                  if (linkedPreset) {
+                    setPlanName(caseReq.request_type || 'Treatment Plan');
+                    setSelectedPresetId(linkedPreset.id);
+                    applyPresetSections(linkedPreset.fields as any[] || []);
+                    return;
+                  }
+                }
+              }
+            }
+          }
+        } catch { /* notes is not JSON, skip */ }
+      }
+    }
+
+    // Final fallback: find case requests linked to the patient
+    const { data: phaseData } = await supabase.from('phases').select('patient_id').eq('id', pId).single();
+    if (phaseData?.patient_id) {
+      const { data: caseReqs } = await supabase.from('case_requests').select('request_type').eq('patient_id', phaseData.patient_id).order('created_at', { ascending: false }).limit(1);
+      if (caseReqs && caseReqs.length > 0) {
         const { data: allPresets } = await supabase.from('presets').select('id, name, description, category, fields').in('category', ['request_type', 'plan_preset']);
         if (allPresets) {
-          const reqType = allPresets.find(p => p.category === 'request_type' && p.name === caseReq.request_type);
+          const reqType = allPresets.find(p => p.category === 'request_type' && p.name === caseReqs[0].request_type);
           const linkedPresetId = reqType?.description;
           if (linkedPresetId) {
             const linkedPreset = allPresets.find(p => p.id === linkedPresetId);
             if (linkedPreset) {
-              setPlanName(caseReq.request_type || 'Treatment Plan');
+              setPlanName(caseReqs[0].request_type || 'Treatment Plan');
               setSelectedPresetId(linkedPreset.id);
               applyPresetSections(linkedPreset.fields as any[] || []);
             }
@@ -146,6 +185,18 @@ export default function PlanEditor() {
         }
       }
     }
+  };
+
+  const loadPresetById = (presetId: string) => {
+    const preset = planPresets.find(p => p.id === presetId);
+    if (!preset) return;
+    // Clear existing sections
+    setIprSections([]); setMovementSections([]); setImageSections([]);
+    setVideoSections([]); setAudioSections([]); setFeasibilitySections([]);
+    setModelSections([]); setCephSections([]);
+    setSelectedPresetId(presetId);
+    applyPresetSections(preset.fields || []);
+    toast.success(`Loaded preset: ${preset.name}`);
   };
 
   const applyPresetSections = (fields: { label: string; type: string }[]) => {
