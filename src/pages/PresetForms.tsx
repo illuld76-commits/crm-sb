@@ -381,6 +381,10 @@ export default function PresetForms() {
       payload.fields = newFields as any;
       payload.unit = newUnit && newUnit !== '__none__' ? newUnit : null;
     }
+    if (activeTab === 'request_type') {
+      payload.unit = newUnit || null; // linked work order id
+      payload.description = newDescription && newDescription !== '__none__' ? newDescription : null; // linked plan preset id
+    }
 
     if (editingPresetId) {
       // Update existing
