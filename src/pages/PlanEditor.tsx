@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
-import { ArrowLeft, Save, Upload, Eye, Trash2, FileText, Image, Pencil, ChevronDown, ChevronRight, Mic, Video, Plus, MousePointerClick, FlaskConical, Scan, Undo2 } from 'lucide-react';
+import { ArrowLeft, Save, Upload, Eye, Trash2, FileText, Image, Pencil, ChevronDown, ChevronRight, Mic, Video, Plus, MousePointerClick, FlaskConical, Scan, Undo2, BookTemplate } from 'lucide-react';
 import { logAction } from '@/lib/audit';
 import SnaponLogo from '@/components/SnaponLogo';
 import { parseIPRCSV, parseToothMovementCSV, parseCombinedCSV, readFileAsText, readFileAsTextUTF8, IPRData, ToothMovementData } from '@/lib/csv-parser';
@@ -785,6 +785,11 @@ export default function PlanEditor() {
                     if (confirm('Unpublish this plan? The public share link will stop working.')) unpublishPlan();
                   }}>
                     <Undo2 className="w-3 h-3 mr-1" /> Unpublish
+                  </Button>
+                )}
+                {isAdmin && (
+                  <Button variant="outline" size="sm" onClick={saveAsTemplate}>
+                    <BookTemplate className="w-3 h-3 mr-1" /> Save as Template
                   </Button>
                 )}
               </>
