@@ -145,11 +145,15 @@ export default function GlobalKanban() {
     return result;
   }, [caseRequests, search, sortBy, caseFilterStatus]);
 
+  const visibleColumns = useMemo(() => {
+    return isAdmin ? PLAN_COLUMNS : PLAN_COLUMNS.filter(c => c.id !== 'draft');
+  }, [isAdmin]);
+
   const planColumnsData = useMemo(() => {
     const data: Record<string, EnrichedPlan[]> = {};
-    PLAN_COLUMNS.forEach(col => { data[col.id] = filteredPlans.filter(p => p.status === col.id); });
+    visibleColumns.forEach(col => { data[col.id] = filteredPlans.filter(p => p.status === col.id); });
     return data;
-  }, [filteredPlans]);
+  }, [filteredPlans, visibleColumns]);
 
   // Toggle plan status for non-admin users (approve/reject)
   const togglePlanApproval = async (planId: string, newStatus: 'approved' | 'rejected') => {
@@ -315,7 +319,7 @@ export default function GlobalKanban() {
         {loading ? <p className="text-center py-10 text-muted-foreground">Loading...</p> : activeView === 'plans' ? (
           <DragDropContext onDragEnd={onPlanDragEnd}>
             <div className="flex gap-4 overflow-x-auto pb-4 min-h-[400px] md:min-h-[600px] snap-x snap-mandatory md:snap-none">
-              {PLAN_COLUMNS.map(column => (
+              {visibleColumns.map(column => (
                 <div key={column.id} className="flex-shrink-0 w-72 sm:w-80 snap-start flex flex-col gap-3">
                   <div className="flex items-center gap-2 px-2">
                     <div className={`w-2 h-2 rounded-full ${column.color}`} />

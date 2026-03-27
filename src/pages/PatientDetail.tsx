@@ -28,6 +28,7 @@ import {
 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import SnaponLogo from '@/components/SnaponLogo';
+import { getCompanyPeers } from '@/lib/company-scope';
 import IPRQuadrantDiagram from '@/components/IPRQuadrantDiagram';
 import ToothMovementChart from '@/components/ToothMovementChart';
 import CommunicationHub from '@/components/CommunicationHub';
@@ -211,7 +212,14 @@ export default function PatientDetail() {
 
   const fetchAllProfiles = async () => {
     const { data } = await supabase.from('profiles').select('user_id, display_name');
-    setAllProfiles(data || []);
+    const all = data || [];
+    if (isAdmin || !user) {
+      setAllProfiles(all);
+    } else {
+      // Company-circle scoping: only show peers + admins
+      const peerIds = await getCompanyPeers(user.id);
+      setAllProfiles(all.filter(p => peerIds.includes(p.user_id)));
+    }
   };
 
   const loadPatient = async (patientId: string) => {

@@ -69,38 +69,25 @@ export default function InviteUserDialog({ patients, clinics, doctors, onInvited
 
     setLoading(true);
     try {
-      // 1. Create user with invited_role metadata via admin invite (or signUp with metadata)
-      // For now, we'll use signUp with metadata. In production, you'd use admin API.
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password: crypto.randomUUID(), // Temp password, user will reset
-        options: {
-          data: {
-            display_name: displayName || email,
-            invited_role: 'user',
-          },
-          emailRedirectTo: window.location.origin + '/auth',
+      // Use the create-user edge function instead of direct signUp
+      const tempPassword = crypto.randomUUID().slice(0, 12) + 'A1!';
+      const res = await supabase.functions.invoke('create-user', {
+        body: {
+          email,
+          password: tempPassword,
+          display_name: displayName || email,
+          assignments: assignments.map(a => ({
+            type: a.type,
+            value: a.value,
+            expires_at: null,
+          })),
         },
       });
 
-      if (authError) throw authError;
-      if (!authData.user) throw new Error('Failed to create user');
+      if (res.error) throw new Error(res.error.message);
+      if (res.data?.error) throw new Error(res.data.error);
 
-      // 2. Create assignments
-      const assignmentInserts = assignments.map(a => ({
-        user_id: authData.user!.id,
-        assignment_type: a.type,
-        assignment_value: a.value,
-        assigned_by: user.id,
-      }));
-
-      const { error: assignError } = await supabase
-        .from('user_assignments')
-        .insert(assignmentInserts);
-
-      if (assignError) throw assignError;
-
-      toast.success(`Invitation sent to ${email}`);
+      toast.success(`User ${email} created successfully. Temp password: ${tempPassword}`, { duration: 10000 });
       setOpen(false);
       setEmail('');
       setDisplayName('');
