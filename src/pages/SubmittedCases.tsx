@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { Search, CheckCircle2, XCircle, Eye, Download, ArrowUpDown, Ban, Play, Pause, CircleCheck, Trash2, UserPlus } from 'lucide-react';
+import { Search, CheckCircle2, XCircle, Eye, Download, ArrowUpDown, Ban, Play, Pause, CircleCheck, Trash2, UserPlus, LayoutGrid, List } from 'lucide-react';
 import { CaseRequest } from '@/types';
 
 type SortOption = 'date_desc' | 'date_asc' | 'name_az' | 'name_za';
@@ -27,6 +27,7 @@ export default function SubmittedCases() {
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<SortOption>('date_desc');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
   useEffect(() => {
     const fetchCases = async () => {
@@ -144,6 +145,10 @@ export default function SubmittedCases() {
               </SelectContent>
             </Select>
             {isAdmin && <Button variant="outline" size="sm" onClick={exportCSV}><Download className="w-3 h-3 mr-1" /> CSV</Button>}
+            <div className="flex items-center border rounded-md overflow-hidden">
+              <Button variant={viewMode === 'list' ? 'secondary' : 'ghost'} size="sm" className="h-9 rounded-none" onClick={() => setViewMode('list')}><List className="w-3 h-3" /></Button>
+              <Button variant={viewMode === 'grid' ? 'secondary' : 'ghost'} size="sm" className="h-9 rounded-none" onClick={() => setViewMode('grid')}><LayoutGrid className="w-3 h-3" /></Button>
+            </div>
           </div>
         </div>
 
@@ -151,7 +156,7 @@ export default function SubmittedCases() {
           <p className="text-center py-10 text-muted-foreground">Loading...</p>
         ) : filtered.length === 0 ? (
           <p className="text-center py-10 text-muted-foreground">No case requests found</p>
-        ) : (
+        ) : viewMode === 'list' ? (
           <div className="space-y-3">
             {filtered.map(c => (
               <Card key={c.id} className="hover:shadow-md transition-shadow">
