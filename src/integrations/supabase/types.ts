@@ -14,7 +14,965 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      assets: {
+        Row: {
+          case_id: string | null
+          category: string | null
+          created_at: string
+          display_id: string | null
+          file_size: number | null
+          file_type: string | null
+          file_url: string
+          id: string
+          is_deleted: boolean | null
+          is_downloadable: boolean | null
+          is_viewable: boolean | null
+          original_name: string | null
+          related_id: string | null
+        }
+        Insert: {
+          case_id?: string | null
+          category?: string | null
+          created_at?: string
+          display_id?: string | null
+          file_size?: number | null
+          file_type?: string | null
+          file_url: string
+          id?: string
+          is_deleted?: boolean | null
+          is_downloadable?: boolean | null
+          is_viewable?: boolean | null
+          original_name?: string | null
+          related_id?: string | null
+        }
+        Update: {
+          case_id?: string | null
+          category?: string | null
+          created_at?: string
+          display_id?: string | null
+          file_size?: number | null
+          file_type?: string | null
+          file_url?: string
+          id?: string
+          is_deleted?: boolean | null
+          is_downloadable?: boolean | null
+          is_viewable?: boolean | null
+          original_name?: string | null
+          related_id?: string | null
+        }
+        Relationships: []
+      }
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          details: string | null
+          id: string
+          is_archived: boolean | null
+          new_value: string | null
+          old_value: string | null
+          target_id: string
+          target_name: string | null
+          target_type: string
+          user_id: string
+          user_name: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: string | null
+          id?: string
+          is_archived?: boolean | null
+          new_value?: string | null
+          old_value?: string | null
+          target_id: string
+          target_name?: string | null
+          target_type: string
+          user_id: string
+          user_name?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: string | null
+          id?: string
+          is_archived?: boolean | null
+          new_value?: string | null
+          old_value?: string | null
+          target_id?: string
+          target_name?: string | null
+          target_type?: string
+          user_id?: string
+          user_name?: string | null
+        }
+        Relationships: []
+      }
+      case_requests: {
+        Row: {
+          attachments: Json | null
+          clinic_name: string | null
+          created_at: string
+          display_id: string | null
+          doctor_name: string | null
+          dynamic_data: Json | null
+          history: Json | null
+          id: string
+          is_deleted: boolean | null
+          is_submitted: boolean | null
+          lab_name: string | null
+          notes: string | null
+          patient_age: number | null
+          patient_id: string | null
+          patient_name: string
+          patient_sex: string | null
+          remarks: Json | null
+          request_type: string
+          status: string
+          updated_at: string
+          user_id: string
+          work_order_type: string | null
+        }
+        Insert: {
+          attachments?: Json | null
+          clinic_name?: string | null
+          created_at?: string
+          display_id?: string | null
+          doctor_name?: string | null
+          dynamic_data?: Json | null
+          history?: Json | null
+          id?: string
+          is_deleted?: boolean | null
+          is_submitted?: boolean | null
+          lab_name?: string | null
+          notes?: string | null
+          patient_age?: number | null
+          patient_id?: string | null
+          patient_name: string
+          patient_sex?: string | null
+          remarks?: Json | null
+          request_type?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+          work_order_type?: string | null
+        }
+        Update: {
+          attachments?: Json | null
+          clinic_name?: string | null
+          created_at?: string
+          display_id?: string | null
+          doctor_name?: string | null
+          dynamic_data?: Json | null
+          history?: Json | null
+          id?: string
+          is_deleted?: boolean | null
+          is_submitted?: boolean | null
+          lab_name?: string | null
+          notes?: string | null
+          patient_age?: number | null
+          patient_id?: string | null
+          patient_name?: string
+          patient_sex?: string | null
+          remarks?: Json | null
+          request_type?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+          work_order_type?: string | null
+        }
+        Relationships: []
+      }
+      communications: {
+        Row: {
+          attachments: Json | null
+          case_id: string
+          content: string | null
+          created_at: string
+          id: string
+          message: string | null
+          related_id: string | null
+          related_type: string | null
+          sender_id: string
+          sender_name: string | null
+          type: string | null
+        }
+        Insert: {
+          attachments?: Json | null
+          case_id: string
+          content?: string | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          related_id?: string | null
+          related_type?: string | null
+          sender_id: string
+          sender_name?: string | null
+          type?: string | null
+        }
+        Update: {
+          attachments?: Json | null
+          case_id?: string
+          content?: string | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          related_id?: string | null
+          related_type?: string | null
+          sender_id?: string
+          sender_name?: string | null
+          type?: string | null
+        }
+        Relationships: []
+      }
+      email_templates: {
+        Row: {
+          body_template: string
+          created_at: string
+          event_type: string
+          id: string
+          subject_template: string
+        }
+        Insert: {
+          body_template: string
+          created_at?: string
+          event_type: string
+          id?: string
+          subject_template: string
+        }
+        Update: {
+          body_template?: string
+          created_at?: string
+          event_type?: string
+          id?: string
+          subject_template?: string
+        }
+        Relationships: []
+      }
+      expenses: {
+        Row: {
+          amount: number
+          category: string | null
+          created_at: string
+          currency: string | null
+          description: string | null
+          id: string
+          invoice_id: string | null
+          is_billable: boolean | null
+          is_deleted: boolean | null
+          notes: string | null
+          vendor_name: string | null
+        }
+        Insert: {
+          amount?: number
+          category?: string | null
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          id?: string
+          invoice_id?: string | null
+          is_billable?: boolean | null
+          is_deleted?: boolean | null
+          notes?: string | null
+          vendor_name?: string | null
+        }
+        Update: {
+          amount?: number
+          category?: string | null
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          id?: string
+          invoice_id?: string | null
+          is_billable?: boolean | null
+          is_deleted?: boolean | null
+          notes?: string | null
+          vendor_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          amount_usd: number
+          balance_due: number | null
+          case_request_id: string | null
+          client_details: Json | null
+          created_at: string
+          currency_local: string | null
+          discount_data: Json | null
+          display_id: string | null
+          due_date: string | null
+          exchange_rate: number | null
+          gst_number: string | null
+          hsn_code: string | null
+          id: string
+          invoice_number: string | null
+          is_deleted: boolean | null
+          is_locked: boolean | null
+          items: Json | null
+          merchant_details: Json | null
+          patient_id: string | null
+          patient_name: string
+          phase_id: string | null
+          place_of_supply: string | null
+          presets_applied: Json | null
+          primary_user_id: string | null
+          receipt_url: string | null
+          secondary_user_ids: Json | null
+          status: string
+          tax_data: Json | null
+          type: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_usd?: number
+          balance_due?: number | null
+          case_request_id?: string | null
+          client_details?: Json | null
+          created_at?: string
+          currency_local?: string | null
+          discount_data?: Json | null
+          display_id?: string | null
+          due_date?: string | null
+          exchange_rate?: number | null
+          gst_number?: string | null
+          hsn_code?: string | null
+          id?: string
+          invoice_number?: string | null
+          is_deleted?: boolean | null
+          is_locked?: boolean | null
+          items?: Json | null
+          merchant_details?: Json | null
+          patient_id?: string | null
+          patient_name: string
+          phase_id?: string | null
+          place_of_supply?: string | null
+          presets_applied?: Json | null
+          primary_user_id?: string | null
+          receipt_url?: string | null
+          secondary_user_ids?: Json | null
+          status?: string
+          tax_data?: Json | null
+          type?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_usd?: number
+          balance_due?: number | null
+          case_request_id?: string | null
+          client_details?: Json | null
+          created_at?: string
+          currency_local?: string | null
+          discount_data?: Json | null
+          display_id?: string | null
+          due_date?: string | null
+          exchange_rate?: number | null
+          gst_number?: string | null
+          hsn_code?: string | null
+          id?: string
+          invoice_number?: string | null
+          is_deleted?: boolean | null
+          is_locked?: boolean | null
+          items?: Json | null
+          merchant_details?: Json | null
+          patient_id?: string | null
+          patient_name?: string
+          phase_id?: string | null
+          place_of_supply?: string | null
+          presets_applied?: Json | null
+          primary_user_id?: string | null
+          receipt_url?: string | null
+          secondary_user_ids?: Json | null
+          status?: string
+          tax_data?: Json | null
+          type?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notification_templates: {
+        Row: {
+          body_template: string
+          created_at: string
+          event_type: string
+          id: string
+          title_template: string
+        }
+        Insert: {
+          body_template: string
+          created_at?: string
+          event_type: string
+          id?: string
+          title_template: string
+        }
+        Update: {
+          body_template?: string
+          created_at?: string
+          event_type?: string
+          id?: string
+          title_template?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          is_read: boolean | null
+          link: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          link?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          link?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      patients: {
+        Row: {
+          archived_at: string | null
+          clinic_name: string | null
+          company_name: string | null
+          contact_email: string | null
+          contact_phone: string | null
+          country: string | null
+          created_at: string
+          doctor_name: string | null
+          id: string
+          lab_name: string | null
+          patient_age: number | null
+          patient_id_label: string | null
+          patient_name: string
+          patient_sex: string | null
+          primary_user_id: string | null
+          secondary_user_id: string | null
+          share_token: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          clinic_name?: string | null
+          company_name?: string | null
+          contact_email?: string | null
+          contact_phone?: string | null
+          country?: string | null
+          created_at?: string
+          doctor_name?: string | null
+          id?: string
+          lab_name?: string | null
+          patient_age?: number | null
+          patient_id_label?: string | null
+          patient_name: string
+          patient_sex?: string | null
+          primary_user_id?: string | null
+          secondary_user_id?: string | null
+          share_token?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          clinic_name?: string | null
+          company_name?: string | null
+          contact_email?: string | null
+          contact_phone?: string | null
+          country?: string | null
+          created_at?: string
+          doctor_name?: string | null
+          id?: string
+          lab_name?: string | null
+          patient_age?: number | null
+          patient_id_label?: string | null
+          patient_name?: string
+          patient_sex?: string | null
+          primary_user_id?: string | null
+          secondary_user_id?: string | null
+          share_token?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      phases: {
+        Row: {
+          created_at: string
+          id: string
+          is_deleted: boolean | null
+          patient_id: string
+          phase_name: string
+          phase_order: number
+          share_token: string | null
+          status: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_deleted?: boolean | null
+          patient_id: string
+          phase_name: string
+          phase_order?: number
+          share_token?: string | null
+          status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_deleted?: boolean | null
+          patient_id?: string
+          phase_name?: string
+          phase_order?: number
+          share_token?: string | null
+          status?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "phases_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plan_remarks: {
+        Row: {
+          attachments: Json | null
+          created_at: string
+          id: string
+          plan_id: string
+          remark_text: string
+          user_id: string
+        }
+        Insert: {
+          attachments?: Json | null
+          created_at?: string
+          id?: string
+          plan_id: string
+          remark_text: string
+          user_id: string
+        }
+        Update: {
+          attachments?: Json | null
+          created_at?: string
+          id?: string
+          plan_id?: string
+          remark_text?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_remarks_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "treatment_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plan_sections: {
+        Row: {
+          caption: string | null
+          created_at: string
+          data_json: Json | null
+          file_url: string | null
+          id: string
+          plan_id: string
+          section_type: string
+          sort_order: number
+        }
+        Insert: {
+          caption?: string | null
+          created_at?: string
+          data_json?: Json | null
+          file_url?: string | null
+          id?: string
+          plan_id: string
+          section_type: string
+          sort_order?: number
+        }
+        Update: {
+          caption?: string | null
+          created_at?: string
+          data_json?: Json | null
+          file_url?: string | null
+          id?: string
+          plan_id?: string
+          section_type?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_sections_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "treatment_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      presets: {
+        Row: {
+          category: string | null
+          created_at: string
+          description: string | null
+          discount_type: string | null
+          discount_value: number | null
+          fee_usd: number | null
+          fields: Json | null
+          id: string
+          name: string
+          tax_rate: number | null
+          type: string | null
+          unit: string | null
+          unit_price: number | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          discount_type?: string | null
+          discount_value?: number | null
+          fee_usd?: number | null
+          fields?: Json | null
+          id?: string
+          name: string
+          tax_rate?: number | null
+          type?: string | null
+          unit?: string | null
+          unit_price?: number | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          discount_type?: string | null
+          discount_value?: number | null
+          fee_usd?: number | null
+          fields?: Json | null
+          id?: string
+          name?: string
+          tax_rate?: number | null
+          type?: string | null
+          unit?: string | null
+          unit_price?: number | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          password_hint: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          password_hint?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          password_hint?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      receipts: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          invoice_id: string
+          notes: string | null
+          payment_date: string
+          payment_method: string
+          receipt_url: string | null
+          reference_number: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          invoice_id: string
+          notes?: string | null
+          payment_date: string
+          payment_method?: string
+          receipt_url?: string | null
+          reference_number?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          invoice_id?: string
+          notes?: string | null
+          payment_date?: string
+          payment_method?: string
+          receipt_url?: string | null
+          reference_number?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "receipts_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      remark_reactions: {
+        Row: {
+          created_at: string
+          emoji: string
+          id: string
+          remark_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          emoji: string
+          id?: string
+          remark_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          emoji?: string
+          id?: string
+          remark_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      settings_entities: {
+        Row: {
+          address: string | null
+          city: string | null
+          contact_person: string | null
+          country: string | null
+          created_at: string
+          email: string | null
+          entity_name: string
+          entity_type: string
+          gst_number: string | null
+          id: string
+          notes: string | null
+          phone: string | null
+          state: string | null
+        }
+        Insert: {
+          address?: string | null
+          city?: string | null
+          contact_person?: string | null
+          country?: string | null
+          created_at?: string
+          email?: string | null
+          entity_name: string
+          entity_type: string
+          gst_number?: string | null
+          id?: string
+          notes?: string | null
+          phone?: string | null
+          state?: string | null
+        }
+        Update: {
+          address?: string | null
+          city?: string | null
+          contact_person?: string | null
+          country?: string | null
+          created_at?: string
+          email?: string | null
+          entity_name?: string
+          entity_type?: string
+          gst_number?: string | null
+          id?: string
+          notes?: string | null
+          phone?: string | null
+          state?: string | null
+        }
+        Relationships: []
+      }
+      tasks: {
+        Row: {
+          assigned_to: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          due_date: string | null
+          id: string
+          patient_id: string
+          status: string | null
+          title: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string
+          created_by: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          patient_id: string
+          status?: string | null
+          title: string
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          patient_id?: string
+          status?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      treatment_plans: {
+        Row: {
+          case_request_id: string | null
+          created_at: string
+          id: string
+          is_deleted: boolean | null
+          is_finalized: boolean | null
+          notes: string | null
+          phase_id: string
+          plan_date: string | null
+          plan_name: string
+          share_token: string | null
+          sort_order: number
+          status: string | null
+          updated_at: string
+        }
+        Insert: {
+          case_request_id?: string | null
+          created_at?: string
+          id?: string
+          is_deleted?: boolean | null
+          is_finalized?: boolean | null
+          notes?: string | null
+          phase_id: string
+          plan_date?: string | null
+          plan_name: string
+          share_token?: string | null
+          sort_order?: number
+          status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          case_request_id?: string | null
+          created_at?: string
+          id?: string
+          is_deleted?: boolean | null
+          is_finalized?: boolean | null
+          notes?: string | null
+          phase_id?: string
+          plan_date?: string | null
+          plan_name?: string
+          share_token?: string | null
+          sort_order?: number
+          status?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "treatment_plans_phase_id_fkey"
+            columns: ["phase_id"]
+            isOneToOne: false
+            referencedRelation: "phases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_assignments: {
+        Row: {
+          assigned_by: string | null
+          assignment_type: string
+          assignment_value: string
+          created_at: string
+          expires_at: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          assigned_by?: string | null
+          assignment_type: string
+          assignment_value: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          assigned_by?: string | null
+          assignment_type?: string
+          assignment_value?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
