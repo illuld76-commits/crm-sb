@@ -212,22 +212,42 @@ export default function Billing() {
     return () => clearTimeout(t);
   }, [patientSearch]);
 
-  const selectPatient = (p: typeof patientResults[0]) => {
+  const selectPatient = async (p: typeof patientResults[0]) => {
     setPatientId(p.id);
     setPatientName(p.patient_name);
     setClientDetails(prev => ({ ...prev, name: p.patient_name }));
     setPatientSearch('');
     setPatientResults([]);
     // Fetch phases and plans for the patient
-    supabase.from('phases').select('id, phase_name').eq('patient_id', p.id).order('phase_order').then(({ data }) => {
-      setPatientPhases(data || []);
-      if (data && data.length > 0) {
-        setPhaseId(data[0].id);
-        supabase.from('treatment_plans').select('id, plan_name, phase_id').in('phase_id', data.map(d => d.id)).then(({ data: plans }) => {
-          setPatientPlans((plans || []) as any);
-        });
+    const { data: phasesData } = await supabase.from('phases').select('id, phase_name').eq('patient_id', p.id).order('phase_order');
+    setPatientPhases(phasesData || []);
+    if (phasesData && phasesData.length > 0) {
+      setPhaseId(phasesData[0].id);
+      const { data: plansData } = await supabase.from('treatment_plans').select('id, plan_name, phase_id, case_request_id').in('phase_id', phasesData.map(d => d.id));
+      setPatientPlans((plansData || []) as any);
+
+      // Auto-populate line items from linked case request's request type
+      if (isNew && plansData && plansData.length > 0) {
+        const planWithRequest = plansData.find((pl: any) => pl.case_request_id);
+        if (planWithRequest) {
+          const { data: caseReq } = await supabase.from('case_requests').select('request_type').eq('id', (planWithRequest as any).case_request_id).single();
+          if (caseReq) {
+            const reqTypePreset = allPresets.find(pr => pr.category === 'request_type' && pr.name === caseReq.request_type);
+            if (reqTypePreset) {
+              setItems([{
+                description: reqTypePreset.name,
+                hsn: '9993',
+                qty: 1,
+                rate: reqTypePreset.unit_price || reqTypePreset.fee_usd || 0,
+                disc_pct: 0,
+                gst_pct: reqTypePreset.tax_rate || 18,
+              }]);
+              setCaseRequestId((planWithRequest as any).case_request_id);
+            }
+          }
+        }
       }
-    });
+    }
   };
 
   const currencySymbol = CURRENCIES.find(c => c.code === currency)?.symbol || currency;
