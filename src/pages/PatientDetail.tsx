@@ -956,6 +956,11 @@ export default function PatientDetail() {
                         <span className="text-xs text-muted-foreground truncate">{asset.original_name || asset.category}</span>
                         {asset.display_id && <span className="text-[9px] text-muted-foreground font-mono">{asset.display_id}</span>}
                       </div>
+                      {/* Relational context badge */}
+                      <div className="flex flex-wrap gap-1">
+                        {asset.category === 'case_request_attachment' && <Badge variant="secondary" className="text-[9px] h-4">📋 Case Request</Badge>}
+                        {asset.category !== 'case_request_attachment' && <Badge variant="outline" className="text-[9px] h-4">{asset.category || 'Direct Upload'}</Badge>}
+                      </div>
                       <div className="flex items-center justify-between">
                         {(isAdmin || asset.is_downloadable) &&
                     <Button variant="ghost" size="icon" className="h-6 w-6" asChild>
@@ -985,7 +990,12 @@ export default function PatientDetail() {
                   </Card>
               )}
                 {/* Plan section files */}
-                {allFiles.map((file) =>
+                {allFiles.map((file) => {
+                  // Find relational context for plan section files
+                  const section = sections.find(s => s.id === file.id);
+                  const plan = section ? plans.find(p => p.id === section.plan_id) : null;
+                  const phase = plan ? phases.find(ph => ph.id === plan.phase_id) : null;
+                  return (
               <Card key={file.id} className="p-3 space-y-2">
                     {file.type === 'image' && file.url ?
                 <img src={file.url} alt={file.caption || ''} className="w-full rounded-lg object-cover h-40" /> :
@@ -1002,8 +1012,13 @@ export default function PatientDetail() {
                         <a href={file.url} target="_blank" rel="noopener noreferrer"><Download className="w-3 h-3" /></a>
                       </Button>
                     </div>
+                    <div className="flex flex-wrap gap-1">
+                      {phase && <Badge variant="outline" className="text-[9px] h-4 cursor-pointer" onClick={() => { setActivePhaseId(phase.id); setActiveTab('workbench'); }}>Phase: {phase.phase_name}</Badge>}
+                      {plan && <Badge variant="secondary" className="text-[9px] h-4 cursor-pointer" onClick={() => { setActivePlanId(plan.id); setActiveTab('workbench'); }}>Plan: {plan.plan_name}</Badge>}
+                    </div>
                   </Card>
-              )}
+                  );
+                })}
               </div>
             }
           </TabsContent>
