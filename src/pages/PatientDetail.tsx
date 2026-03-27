@@ -201,7 +201,7 @@ export default function PatientDetail() {
   useEffect(() => {
     if (!isNew && id) loadPatient(id);
     fetchSettingsEntities();
-    if (isAdmin) fetchAllProfiles();
+    fetchAllProfiles(); // Fetch for all users (needed for task assignees)
   }, [id]);
 
   const fetchSettingsEntities = async () => {
@@ -1144,6 +1144,7 @@ export default function PatientDetail() {
                         {allProfiles.map(p => <SelectItem key={p.user_id} value={p.user_id}>{p.display_name || p.user_id.slice(0, 8)}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                    {!isAdmin && <p className="text-[10px] text-muted-foreground mt-0.5">Showing users with access to this project</p>}
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Due date</Label>
