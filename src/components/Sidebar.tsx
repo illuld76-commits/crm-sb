@@ -208,63 +208,6 @@ export default function Sidebar({ patients, phases, plans, caseRequests, onClose
           </div>
         </div>
       </ScrollArea>
-        </div>
-
-        {/* Cases Section */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">Cases ({filteredPatients.length})</span>
-            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setIsPatientsExpanded(!isPatientsExpanded)}>
-              <ChevronRight className={`h-3 w-3 transition-transform ${isPatientsExpanded ? 'rotate-90' : ''}`} />
-            </Button>
-          </div>
-          {isPatientsExpanded && (
-            <>
-              <div className="relative mb-2">
-                <Search className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
-                <Input placeholder="Search..." className="pl-7 h-7 text-xs" value={search} onChange={e => setSearch(e.target.value)} />
-              </div>
-              <div className="space-y-0.5">
-                {filteredPatients.map(p => {
-                  const patientPhases = phases.filter(ph => ph.patient_id === p.id);
-                  return (
-                    <div key={p.id}>
-                      <div className="flex items-center gap-1">
-                        {patientPhases.length > 0 && (
-                          <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={e => { e.preventDefault(); setExpandedPatients(prev => ({ ...prev, [p.id]: !prev[p.id] })); }}>
-                            <ChevronRight className={`h-3 w-3 transition-transform ${expandedPatients[p.id] ? 'rotate-90' : ''}`} />
-                          </Button>
-                        )}
-                        <Link to={`/patient/${p.id}`} onClick={onClose} className="flex-1 truncate text-xs p-1.5 rounded hover:bg-muted">{p.patient_name}</Link>
-                      </div>
-                      {expandedPatients[p.id] && patientPhases.map(ph => {
-                        const phasePlans = plans.filter(pl => pl.phase_id === ph.id);
-                        return (
-                          <div key={ph.id} className="ml-6">
-                            <div className="flex items-center gap-1">
-                              {phasePlans.length > 0 && (
-                                <Button variant="ghost" size="icon" className="h-4 w-4 shrink-0" onClick={e => { e.preventDefault(); setExpandedPhases(prev => ({ ...prev, [ph.id]: !prev[ph.id] })); }}>
-                                  <ChevronRight className={`h-2 w-2 transition-transform ${expandedPhases[ph.id] ? 'rotate-90' : ''}`} />
-                                </Button>
-                              )}
-                              <span className="text-[10px] text-muted-foreground truncate p-1">{ph.phase_name}</span>
-                            </div>
-                            {expandedPhases[ph.id] && phasePlans.map(pl => (
-                              <Link key={pl.id} to={`/plan/${pl.id}`} onClick={onClose} className="ml-4 block text-[10px] text-muted-foreground p-1 rounded hover:bg-muted truncate">
-                                {pl.plan_name}
-                              </Link>
-                            ))}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </div>
-      </ScrollArea>
     </div>
   );
 }
