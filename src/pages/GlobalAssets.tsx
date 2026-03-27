@@ -108,12 +108,14 @@ export default function GlobalAssets() {
       const phaseMap: Record<string, any> = {};
       (phases || []).forEach(p => { phaseMap[p.id] = p; });
       const patMap: Record<string, string> = {};
-      (patients || []).forEach(p => { patMap[p.id] = p.patient_name; });
+      scopedSectionPatients.forEach(p => { patMap[p.id] = p.patient_name; });
 
       sections.forEach(s => {
         if (!s.file_url) return;
         const plan = planMap[s.plan_id];
         const phase = plan ? phaseMap[plan.phase_id] : null;
+        // RBAC: skip if patient not in scoped set
+        if (phase && !scopedSectionPatientIds.has(phase.patient_id)) return;
         const patName = phase ? patMap[phase.patient_id] : 'Unknown';
         const ext = s.file_url.split('.').pop()?.toLowerCase() || '';
         const ftype = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext) ? 'image/' + ext
