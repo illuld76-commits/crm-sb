@@ -16,6 +16,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { ArrowLeft, Printer, Save, Plus, Trash2, Receipt as ReceiptIcon, Loader2, Lock, DollarSign, AlertTriangle } from 'lucide-react';
+import { sendNotification } from '@/lib/notifications';
 import { Invoice, Receipt, Preset } from '@/types';
 import { format } from 'date-fns';
 import { useRelationalNav } from '@/hooks/useRelationalNav';
