@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
-import { ArrowLeft, Save, Upload, Eye, Trash2, FileText, Image, Pencil, ChevronDown, ChevronRight, Mic, Video, Plus, MousePointerClick, FlaskConical, Scan, Undo2 } from 'lucide-react';
+import { ArrowLeft, Save, Upload, Eye, Trash2, FileText, Image, Pencil, ChevronDown, ChevronRight, Mic, Video, Plus, MousePointerClick, FlaskConical, Scan, Undo2, BookTemplate } from 'lucide-react';
 import { logAction } from '@/lib/audit';
 import SnaponLogo from '@/components/SnaponLogo';
 import { parseIPRCSV, parseToothMovementCSV, parseCombinedCSV, readFileAsText, readFileAsTextUTF8, IPRData, ToothMovementData } from '@/lib/csv-parser';
@@ -233,6 +233,41 @@ export default function PlanEditor() {
       setIsEditing(true);
       toast.success('Plan unpublished. It is now editable.');
       await logAction({ action: 'Unpublish Plan', target_type: 'plan', target_id: planId, target_name: planName, user_id: user?.id || '', user_name: user?.email || '', details: 'Plan unpublished and reverted to saved state' });
+    }
+  };
+
+  const saveAsTemplate = async () => {
+    if (!user) return;
+    const sectionTypes = [
+      ...feasibilitySections.map(s => ({ label: s.caption || 'Feasibility', type: 'feasibility' as const, required: false })),
+      ...iprSections.map(s => ({ label: s.caption || 'IPR Data', type: 'ipr_data' as const, required: false })),
+      ...movementSections.map(s => ({ label: s.caption || 'Tooth Movement', type: 'tooth_movement' as const, required: false })),
+      ...imageSections.map(s => ({ label: s.caption || 'Images', type: 'images' as const, required: false })),
+      ...videoSections.map(s => ({ label: s.caption || 'Video', type: 'video' as const, required: false })),
+      ...audioSections.map(s => ({ label: s.caption || 'Audio', type: 'audio' as const, required: false })),
+      ...modelSections.map(s => ({ label: s.caption || 'Model Analysis', type: 'model_analysis' as const, required: false })),
+      ...cephSections.map(s => ({ label: s.caption || 'Cephalometric', type: 'cephalometric' as const, required: false })),
+    ].map(f => ({ ...f, id: crypto.randomUUID() }));
+
+    if (sectionTypes.length === 0) {
+      toast.error('No sections to save as template');
+      return;
+    }
+
+    const { error } = await supabase.from('presets').insert({
+      name: `${planName} Template`,
+      fee_usd: 0,
+      type: 'case',
+      category: 'plan_preset',
+      user_id: user.id,
+      description: `Template from plan: ${planName}`,
+      fields: sectionTypes as any,
+    });
+
+    if (!error) {
+      toast.success('Plan saved as template! Find it in Presets → Plan Presets.');
+    } else {
+      toast.error('Failed to save template');
     }
   };
 
@@ -750,6 +785,11 @@ export default function PlanEditor() {
                     if (confirm('Unpublish this plan? The public share link will stop working.')) unpublishPlan();
                   }}>
                     <Undo2 className="w-3 h-3 mr-1" /> Unpublish
+                  </Button>
+                )}
+                {isAdmin && (
+                  <Button variant="outline" size="sm" onClick={saveAsTemplate}>
+                    <BookTemplate className="w-3 h-3 mr-1" /> Save as Template
                   </Button>
                 )}
               </>

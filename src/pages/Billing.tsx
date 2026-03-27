@@ -84,6 +84,7 @@ export default function Billing() {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [presets, setPresets] = useState<Preset[]>([]);
+  const [allPresets, setAllPresets] = useState<Preset[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [showReceiptForm, setShowReceiptForm] = useState(false);
@@ -127,13 +128,21 @@ export default function Billing() {
   // Patient search
   const [patientSearch, setPatientSearch] = useState('');
   const [patientResults, setPatientResults] = useState<{ id: string; patient_name: string; doctor_name: string | null; clinic_name: string | null }[]>([]);
+  const [patientSearchFocused, setPatientSearchFocused] = useState(false);
+
+  // Phase/Plan data for selected patient
+  const [patientPhases, setPatientPhases] = useState<{ id: string; phase_name: string }[]>([]);
+  const [patientPlans, setPatientPlans] = useState<{ id: string; plan_name: string; phase_id: string }[]>([]);
+  const [showPresetPicker, setShowPresetPicker] = useState(false);
 
   // User assignment
   const [allProfiles, setAllProfiles] = useState<{ user_id: string; display_name: string | null }[]>([]);
 
   useEffect(() => {
-    supabase.from('presets').select('*').eq('category', 'fee_item').order('name').then(({ data }) => {
-      setPresets((data || []) as unknown as Preset[]);
+    supabase.from('presets').select('*').order('name').then(({ data }) => {
+      const all = (data || []) as unknown as Preset[];
+      setAllPresets(all);
+      setPresets(all.filter(p => p.category === 'fee' || p.category === 'item' || p.category === 'fee_item'));
     });
     if (isAdmin) {
       supabase.from('profiles').select('user_id, display_name').then(({ data }) => setAllProfiles(data || []));
@@ -209,6 +218,16 @@ export default function Billing() {
     setClientDetails(prev => ({ ...prev, name: p.patient_name }));
     setPatientSearch('');
     setPatientResults([]);
+    // Fetch phases and plans for the patient
+    supabase.from('phases').select('id, phase_name').eq('patient_id', p.id).order('phase_order').then(({ data }) => {
+      setPatientPhases(data || []);
+      if (data && data.length > 0) {
+        setPhaseId(data[0].id);
+        supabase.from('treatment_plans').select('id, plan_name, phase_id').in('phase_id', data.map(d => d.id)).then(({ data: plans }) => {
+          setPatientPlans((plans || []) as any);
+        });
+      }
+    });
   };
 
   const currencySymbol = CURRENCIES.find(c => c.code === currency)?.symbol || currency;
@@ -428,18 +447,50 @@ export default function Billing() {
                     onChange={e => { if (!isEditable) return; setPatientName(e.target.value); setPatientSearch(e.target.value); }}
                     placeholder="Search or type patient name..."
                     disabled={!isEditable}
+                    onFocus={() => setPatientSearchFocused(true)}
+                    onBlur={() => setTimeout(() => setPatientSearchFocused(false), 200)}
                   />
-                  {patientResults.length > 0 && isEditable && (
-                    <div className="absolute z-10 w-full mt-1 bg-popover border rounded-md shadow-md">
-                      {patientResults.map(p => (
+                  {patientSearchFocused && patientSearch.length >= 2 && (
+                    <div className="absolute z-10 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
+                      {patientResults.length > 0 ? patientResults.map(p => (
                         <div key={p.id} className="px-3 py-2 text-sm hover:bg-accent cursor-pointer" onClick={() => selectPatient(p)}>
                           <span className="font-medium">{p.patient_name}</span>
                           {p.doctor_name && <span className="text-muted-foreground"> • {p.doctor_name}</span>}
+                          {p.clinic_name && <span className="text-muted-foreground text-xs"> • {p.clinic_name}</span>}
                         </div>
-                      ))}
+                      )) : (
+                        <div className="px-3 py-2 text-sm text-muted-foreground">No patients found</div>
+                      )}
                     </div>
                   )}
                 </div>
+                {/* Phase/Plan selector */}
+                {patientId && patientPhases.length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border/50">
+                    <div>
+                      <Label className="text-xs">Phase</Label>
+                      <Select value={phaseId || '__none__'} onValueChange={v => setPhaseId(v === '__none__' ? null : v)} disabled={!isEditable}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select phase..." /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">None</SelectItem>
+                          {patientPhases.map(ph => <SelectItem key={ph.id} value={ph.id}>{ph.phase_name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {phaseId && patientPlans.filter(p => p.phase_id === phaseId).length > 0 && (
+                      <div>
+                        <Label className="text-xs">Plan (for reference)</Label>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {patientPlans.filter(p => p.phase_id === phaseId).map(pl => (
+                            <Badge key={pl.id} variant="outline" className="text-[10px] cursor-pointer hover:bg-accent" onClick={() => openPreview('plan', pl.id)}>
+                              {pl.plan_name}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div><Label className="text-xs">Email</Label><Input value={clientDetails.email} onChange={e => setClientDetails(p => ({ ...p, email: e.target.value }))} disabled={!isEditable} /></div>
                   <div><Label className="text-xs">Address</Label><Input value={clientDetails.address || ''} onChange={e => setClientDetails(p => ({ ...p, address: e.target.value }))} disabled={!isEditable} /></div>
@@ -540,7 +591,32 @@ export default function Billing() {
                     </div>
                   );
                 })}
-                {isEditable && <Button variant="outline" size="sm" className="text-xs" onClick={addItem}><Plus className="w-3 h-3 mr-1" /> Add Item</Button>}
+                {isEditable && (
+                  <div className="flex gap-2 flex-wrap">
+                    <Button variant="outline" size="sm" className="text-xs" onClick={addItem}><Plus className="w-3 h-3 mr-1" /> Add Item</Button>
+                    <Button variant="outline" size="sm" className="text-xs" onClick={() => setShowPresetPicker(!showPresetPicker)}>
+                      <DollarSign className="w-3 h-3 mr-1" /> Add from Presets
+                    </Button>
+                  </div>
+                )}
+                {showPresetPicker && (
+                  <div className="border rounded-lg p-3 bg-muted/20 space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">Select preset items to add:</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                      {allPresets.filter(p => ['fee', 'item', 'fee_item', 'request_type'].includes(p.category)).map(p => (
+                        <div key={p.id} className="flex items-center justify-between p-2 rounded border border-border/50 hover:bg-accent/50 cursor-pointer text-xs"
+                          onClick={() => {
+                            applyPreset(p);
+                            toast.success(`Added: ${p.name}`);
+                          }}>
+                          <span className="font-medium truncate">{p.name}</span>
+                          <span className="text-muted-foreground shrink-0">{currencySymbol}{p.unit_price || p.fee_usd || 0}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <Button variant="ghost" size="sm" className="text-xs" onClick={() => setShowPresetPicker(false)}>Close</Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
