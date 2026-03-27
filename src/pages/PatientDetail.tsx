@@ -327,8 +327,8 @@ export default function PatientDetail() {
       }
 
       // Plan remarks for visible plans
-      if (remarks && remarks.length > 0) {
-        remarks.forEach((r: any) => {
+      if (fetchedRemarkData && fetchedRemarkData.length > 0) {
+        fetchedRemarkData.forEach((r: any) => {
           timelineItems.push({
             id: r.id,
             action: 'Remark',
