@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { Plus, Trash2, GripVertical, ChevronDown, HelpCircle, Mail, Eye, Send, Save } from 'lucide-react';
+import ToothChartSelector, { ToothSelection } from '@/components/ToothChartSelector';
 
 interface PresetField {
   id: string;
@@ -129,6 +130,8 @@ export default function PresetForms() {
   const [presets, setPresets] = useState<PresetRecord[]>([]);
   const [activeTab, setActiveTab] = useState('work_order');
   const [dentalPanelOpen, setDentalPanelOpen] = useState(false);
+  const [showFormPreview, setShowFormPreview] = useState(false);
+  const [previewToothData, setPreviewToothData] = useState<ToothSelection[]>([]);
 
   // New preset form state
   const [newName, setNewName] = useState('');
@@ -361,10 +364,70 @@ export default function PresetForms() {
                     </div>
                   ))}
                 </div>
+
+                {/* Form Preview Button */}
+                {newFields.length > 0 && (
+                  <Button variant="outline" size="sm" className="gap-1" onClick={() => setShowFormPreview(true)}>
+                    <Eye className="w-3 h-3" /> Preview Form
+                  </Button>
+                )}
                 <Button onClick={addPreset} size="sm" className="gap-1"><Plus className="w-3 h-3" /> Add Preset</Button>
               </CardContent>
             </Card>
-          </TabsContent>
+
+            {/* Form Preview Dialog */}
+            <Dialog open={showFormPreview} onOpenChange={setShowFormPreview}>
+              <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+                <DialogHeader><DialogTitle className="text-sm">📋 Form Preview — {newName || 'Untitled'}</DialogTitle></DialogHeader>
+                <div className="space-y-4">
+                  {newFields.map(field => {
+                    if (field.type === 'tooth_chart') {
+                      return (
+                        <div key={field.id} className="space-y-1">
+                          <Label className="text-xs font-medium">{field.label || 'Tooth Selection'}</Label>
+                          <ToothChartSelector value={previewToothData} onChange={setPreviewToothData} />
+                        </div>
+                      );
+                    }
+                    if (field.type === 'textarea') {
+                      return (
+                        <div key={field.id} className="space-y-1">
+                          <Label className="text-xs">{field.label}{field.required && ' *'}</Label>
+                          <Textarea className="text-xs" rows={3} placeholder={field.label} readOnly />
+                        </div>
+                      );
+                    }
+                    if (['radio', 'dropdown'].includes(field.type) && field.options) {
+                      return (
+                        <div key={field.id} className="space-y-1">
+                          <Label className="text-xs">{field.label}{field.required && ' *'}</Label>
+                          <Select><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select..." /></SelectTrigger>
+                            <SelectContent>{field.options.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                      );
+                    }
+                    if (field.type === 'checkbox' && field.options) {
+                      return (
+                        <div key={field.id} className="space-y-1">
+                          <Label className="text-xs">{field.label}</Label>
+                          <div className="flex flex-wrap gap-2">
+                            {field.options.map(o => <label key={o} className="flex items-center gap-1 text-xs"><input type="checkbox" disabled /> {o}</label>)}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={field.id} className="space-y-1">
+                        <Label className="text-xs">{field.label}{field.required && ' *'}</Label>
+                        <Input className="h-8 text-xs" placeholder={field.label} readOnly />
+                      </div>
+                    );
+                  })}
+                  {newFields.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No fields to preview</p>}
+                </div>
+              </DialogContent>
+            </Dialog>
 
           {/* Plan Presets */}
           <TabsContent value="plan_preset">
@@ -694,24 +757,30 @@ export default function PresetForms() {
         {activeTab !== 'email_templates' && (
           <div className="mt-6 space-y-3">
             <h3 className="text-sm font-semibold text-muted-foreground">Existing {activeTab.replace('_', ' ')} presets ({tabPresets.length})</h3>
-            {tabPresets.map(p => (
-              <Card key={p.id}>
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <span className="font-medium text-sm">{p.name}</span>
-                    {p.fee_usd > 0 && <span className="text-xs text-muted-foreground ml-2">${p.fee_usd}</span>}
-                    {p.unit_price && <span className="text-xs text-muted-foreground ml-2">${p.unit_price}{p.unit ? `/${p.unit}` : ''}</span>}
-                    {p.discount_value && <span className="text-xs text-muted-foreground ml-2">{p.discount_type === 'percentage' ? `${p.discount_value}%` : `$${p.discount_value}`}</span>}
-                    {p.tax_rate && <span className="text-xs text-muted-foreground ml-2">{p.tax_rate}%</span>}
-                    {p.description && <p className="text-xs text-muted-foreground">{p.description}</p>}
-                    {p.fields && p.fields.length > 0 && <span className="text-[10px] text-muted-foreground ml-2">({p.fields.length} fields)</span>}
-                  </div>
-                  <Button variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => deletePreset(p.id)}>
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+            {tabPresets.map(p => {
+              const linkedWo = activeTab === 'request_type' && p.unit ? presets.find(x => x.id === p.unit) : null;
+              const linkedPlan = activeTab === 'request_type' && p.description ? presets.find(x => x.id === p.description) : null;
+              return (
+                <Card key={p.id}>
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div>
+                      <span className="font-medium text-sm">{p.name}</span>
+                      {p.fee_usd > 0 && <span className="text-xs text-muted-foreground ml-2">${p.fee_usd}</span>}
+                      {p.unit_price && <span className="text-xs text-muted-foreground ml-2">${p.unit_price}{p.unit ? `/${p.unit}` : ''}</span>}
+                      {p.discount_value && activeTab !== 'request_type' && <span className="text-xs text-muted-foreground ml-2">{p.discount_type === 'percentage' ? `${p.discount_value}%` : `$${p.discount_value}`}</span>}
+                      {p.tax_rate && <span className="text-xs text-muted-foreground ml-2">{p.tax_rate}%</span>}
+                      {linkedWo && <Badge variant="outline" className="text-[10px] ml-2">WO: {linkedWo.name}</Badge>}
+                      {linkedPlan && <Badge variant="outline" className="text-[10px] ml-2">Plan: {linkedPlan.name}</Badge>}
+                      {!linkedWo && !linkedPlan && p.description && activeTab !== 'request_type' && <p className="text-xs text-muted-foreground">{p.description}</p>}
+                      {p.fields && p.fields.length > 0 && <span className="text-[10px] text-muted-foreground ml-2">({p.fields.length} fields)</span>}
+                    </div>
+                    <Button variant="ghost" size="icon" className="text-destructive h-7 w-7" onClick={() => deletePreset(p.id)}>
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </main>
