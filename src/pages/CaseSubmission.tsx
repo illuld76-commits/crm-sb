@@ -93,14 +93,28 @@ export default function CaseSubmission() {
     return () => clearTimeout(t);
   }, [patientSearch]);
 
-  const selectExistingPatient = (p: typeof patientResults[0]) => {
+  const selectExistingPatient = async (p: typeof patientResults[0]) => {
     setSelectedPatientId(p.id);
-    setFormData(prev => ({
-      ...prev,
-      patient_name: p.patient_name,
-      doctor_name: p.doctor_name || prev.doctor_name,
-      clinic_name: p.clinic_name || prev.clinic_name,
-    }));
+    // Fetch full patient data including age and sex for auto-population
+    const { data: fullPatient } = await supabase.from('patients').select('patient_name, doctor_name, clinic_name, lab_name, patient_age, patient_sex').eq('id', p.id).single();
+    if (fullPatient) {
+      setFormData(prev => ({
+        ...prev,
+        patient_name: fullPatient.patient_name || prev.patient_name,
+        doctor_name: fullPatient.doctor_name || prev.doctor_name,
+        clinic_name: fullPatient.clinic_name || prev.clinic_name,
+        lab_name: fullPatient.lab_name || prev.lab_name,
+        patient_age: fullPatient.patient_age?.toString() || prev.patient_age,
+        patient_sex: fullPatient.patient_sex || prev.patient_sex,
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        patient_name: p.patient_name,
+        doctor_name: p.doctor_name || prev.doctor_name,
+        clinic_name: p.clinic_name || prev.clinic_name,
+      }));
+    }
     setPatientSearch('');
     setPatientResults([]);
   };
@@ -176,39 +190,53 @@ export default function CaseSubmission() {
 
     // If accepting and no patient linked, create one automatically
     let patientIdToLink = caseData?.patient_id || selectedPatientId;
-    if (newStatus === 'accepted' && !patientIdToLink) {
-      const { data: newPatient, error: patientErr } = await supabase.from('patients').insert({
-        patient_name: caseData!.patient_name,
-        patient_age: caseData!.patient_age,
-        patient_sex: caseData!.patient_sex,
-        user_id: caseData!.user_id,
-        clinic_name: caseData!.clinic_name || null,
-        doctor_name: caseData!.doctor_name || null,
-        lab_name: caseData!.lab_name || null,
-      }).select('id').single();
-      if (!patientErr && newPatient) {
-        patientIdToLink = newPatient.id;
-        // Create initial phase
-        const { data: newPhase } = await supabase.from('phases').insert({ patient_id: newPatient.id, phase_name: 'Initial Treatment', phase_order: 0 }).select('id').single();
+    if (newStatus === 'accepted') {
+      const requestTypeName = caseData!.request_type;
+      const reqTypePreset = presets.find(p => p.category === 'request_type' && p.name === requestTypeName);
+      const planPresetId = reqTypePreset?.description;
+      const planPreset = planPresetId ? presets.find(p => p.id === planPresetId) : null;
+      const planName = planPreset ? planPreset.name : requestTypeName || 'Treatment Plan';
+      const caseName = caseData!.patient_name;
 
-        // Auto-create treatment plan from linked preset if available
+      if (!patientIdToLink) {
+        // Create NEW patient
+        const { data: newPatient, error: patientErr } = await supabase.from('patients').insert({
+          patient_name: caseData!.patient_name,
+          patient_age: caseData!.patient_age,
+          patient_sex: caseData!.patient_sex,
+          user_id: caseData!.user_id,
+          clinic_name: caseData!.clinic_name || null,
+          doctor_name: caseData!.doctor_name || null,
+          lab_name: caseData!.lab_name || null,
+        }).select('id').single();
+        if (!patientErr && newPatient) {
+          patientIdToLink = newPatient.id;
+        }
+      }
+
+      if (patientIdToLink) {
+        // Create phase named after the case request
+        const { data: existingPhases } = await supabase.from('phases').select('phase_order').eq('patient_id', patientIdToLink).order('phase_order', { ascending: false }).limit(1);
+        const nextOrder = (existingPhases?.[0]?.phase_order ?? -1) + 1;
+        const { data: newPhase } = await supabase.from('phases').insert({
+          patient_id: patientIdToLink,
+          phase_name: caseName,
+          phase_order: nextOrder,
+        }).select('id').single();
+
+        // Create plan named after the request type, linked to preset
         if (newPhase) {
-          const requestTypeName = caseData!.request_type;
-          const reqTypePreset = presets.find(p => p.category === 'request_type' && p.name === requestTypeName);
-          const planPresetId = reqTypePreset?.description; // stores linked plan preset ID in description field
-          const planPreset = planPresetId ? presets.find(p => p.id === planPresetId) : null;
-          const planName = planPreset ? planPreset.name : requestTypeName || 'Treatment Plan';
-
           await supabase.from('treatment_plans').insert({
             phase_id: newPhase.id,
             plan_name: planName,
             plan_date: new Date().toISOString().split('T')[0],
             notes: `Auto-created from case request: ${requestTypeName}`,
             status: 'draft',
+            case_request_id: id,
           });
         }
 
-        toast.success('Patient record, phase, and plan created');
+        toast.success('Project, phase, and plan created');
       }
     }
 
