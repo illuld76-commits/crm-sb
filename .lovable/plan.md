@@ -1,141 +1,107 @@
 
 
-# Phase 3 — Comprehensive Gap Fix & Missing Feature Implementation
+# Phase 4 — CRM Contacts, Timeline Fix, Task RBAC & Missing Features
 
-Based on thorough analysis of the current codebase against all stated requirements, here is what is missing, incomplete, or broken.
+## Analysis Summary
 
----
+### Issues Found
 
-## Issues Found
+**1. Activity Timeline in PatientDetail is empty** — Bug at line 294: `const planIds2 = plans.map(...)` uses the `plans` state variable, which hasn't been updated yet at that point in `loadPatient()`. The `setPlans(planData)` call happens earlier but React state is async — `plans` is still the old empty array. Additionally, timeline is admin-only (`if (isAdmin)`), so non-admin users see nothing.
 
-### A. ClientDashboard RBAC Race Condition
-`ClientDashboard.tsx` line 90 calls `fetchData()` on mount (`useEffect(() => { fetchData(); }, [])`) without waiting for `useUserScope` to finish loading. The `canAccessPatient` function returns incorrect results during the loading phase, potentially showing zero patients. The network data confirms the user has patient "sample" with clinic "MKDBC" and assignment to "MKDBC", but the dashboard may filter it out if scope loads after the fetch.
+**2. Settings/Master Data has no CRM fields** — `settings_entities` only stores `entity_name` and `entity_type`. No address, email, phone, GST number, or contact person. This means billing can't auto-populate merchant/client details from the entity record. Currently it just uses patient name as client details.
 
-**Fix:** Add `scopeLoading` guard identical to what was done in `Dashboard.tsx`.
+**3. Task assignment has no RBAC** — Tasks show `allProfiles` (all users) as assignees regardless of role. Non-admin users can assign tasks to anyone. Tasks should scope assignees based on project ownership.
 
-### B. Dashboard Activity Timeline — Empty
-The admin `Dashboard.tsx` has KPI cards but NO activity timeline or recent activity feed. The `ClientDashboard` has one via comms + notifications, but the admin dashboard is missing this entirely.
+**4. Invoice assignment not linked to contacts** — When billing auto-populates, it sets client name from patient_name and address from clinic+doctor strings. It should pull full contact details (email, address, GST) from the entity's CRM record.
 
-**Fix:** Add an "Activity" tab or section to `Dashboard.tsx` fetching from `audit_log` and `notifications`.
+**5. Email integration** — No edge functions exist (`supabase/functions` directory is empty/missing). Notifications are in-app only via the `notifications` table + `sendNotification()`. Email delivery is not wired up.
 
-### C. Dashboard List View — No Expandable Rows
-In the admin Dashboard list view (table mode), clicking a row navigates to PatientDetail but there's no inline expand button to show phases/plans like in grid mode. The `renderExpandedPhases` function is only called inside grid card rendering.
-
-**Fix:** Add expand/collapse toggle to list view rows showing phases and plans inline.
-
-### D. Kanban — Non-Admin Can't See Published Plans
-Network data shows user has role "user" with clinic assignment "MKDBC". The Kanban query at line 75 fetches patients but the RBAC filter at line 100-103 uses `canAccessPatient(p._patient)`. The patient has `clinic_name: "MKDBC"` and user has assignment to "MKDBC", so this should work. However, the `case_requests` filter at line 109 uses `c.user_id === user?.id` which is correct. The actual issue: plans with status "published" should show approve/reject buttons for non-admin (already exists at line 371). Need to verify the plan card shows for non-admin — the plan "dental form test" is status "published" and should appear. The patient query needs to include `clinic_name` etc. for `checkAccess` — already does at line 75. This looks functional.
-
-BUT: The `phases` query at line 76 doesn't filter `is_deleted`. Plans from deleted phases may show.
-
-**Fix:** Add `.eq('is_deleted', false)` to phases query in Kanban.
-
-### E. Messages RBAC — No User Scope Filtering
-`Messages.tsx` fetches all communications without RBAC filtering. Non-admin users can see messages from all cases.
-
-**Fix:** Filter conversations by scoped patient IDs.
-
-### F. GlobalAssets RBAC — No User Scope Filtering
-`GlobalAssets.tsx` fetches all plan_sections and case_requests without RBAC. Non-admin users can see all files.
-
-**Fix:** Filter assets by scoped patients.
-
-### G. Missing Task Management UI
-`types.ts` defines `Task` interface but no task UI exists anywhere. This was identified earlier but never built.
-
-**Fix:** Add a Tasks tab in `PatientDetail.tsx` with CRUD for tasks per project.
-
-### H. Plan Sovereignty — Draft Plans Visible to Non-Admin
-Non-admin users can currently see draft plans in `PatientDetail.tsx` and `ClientDashboard.tsx`. Only published/ongoing/approved/rejected plans should be visible to non-admin users.
-
-**Fix:** Filter plans in ClientDashboard and PatientDetail for non-admin to exclude "draft" status.
-
-### I. Real-Time Notification Bell
-`NotificationBell.tsx` likely fetches on mount only. No Supabase realtime subscription.
-
-**Fix:** Add realtime subscription for notifications table.
-
-### J. SubmittedCases — No Grid/List Toggle
-`SubmittedCases.tsx` only has list view, no grid/list toggle.
-
-**Fix:** Add view toggle consistent with other pages.
+**6. Non-admin users can't see timeline** — The audit_log fetch is wrapped in `if (isAdmin)`, so non-admin users always see "No activity recorded."
 
 ---
 
 ## Implementation Plan
 
-### 1. Fix ClientDashboard RBAC Loading Guard
-**File:** `src/pages/ClientDashboard.tsx`
-- Import `useUserScope` loading state
-- Change `useEffect(() => { fetchData(); }, [])` to guard with `if (scopeLoading) return;` and depend on `[scopeLoading]`
+### 1. Extend `settings_entities` with CRM Contact Fields (Migration)
 
-### 2. Add Activity Timeline to Admin Dashboard
-**File:** `src/pages/Dashboard.tsx`
-- Add an "Activity" section below KPI cards
-- Fetch from `audit_log` table (latest 20 entries) 
-- Render as a simple timeline with action, target_name, user_name, created_at
+Add columns to `settings_entities`:
+- `contact_person` text
+- `email` text  
+- `phone` text
+- `address` text
+- `gst_number` text
+- `city` text
+- `state` text
+- `country` text
+- `notes` text
 
-### 3. Add Expand/Collapse to Dashboard List View
-**File:** `src/pages/Dashboard.tsx`
-- In the list view table rows, add an expand button that shows `renderExpandedPhases(p.id)` inline beneath the row
+This turns Settings into a proper CRM Contacts module — each Doctor, Clinic, Lab, Company becomes a full contact record with address and tax info, like SuiteDash's contact management.
 
-### 4. Filter Draft Plans for Non-Admin
-**File:** `src/pages/ClientDashboard.tsx`
-- Filter `plans` to exclude `status === 'draft'` for non-admin users in the enrichedPlans mapping
+### 2. Upgrade Settings Page to CRM Contacts Manager
+
+**File:** `src/pages/Settings.tsx`
+
+Replace the simple name-only add form with a full contact form:
+- Name, Contact Person, Email, Phone, Address (multi-line), City, State, Country, GST Number, Notes
+- Expandable/collapsible card per entity showing all details
+- Edit button to modify existing entity details (currently only delete exists)
+- Search/filter within each tab
+
+### 3. Fix Activity Timeline Bug in PatientDetail
 
 **File:** `src/pages/PatientDetail.tsx`
-- In plan rendering, hide draft plans from non-admin users (only show published, ongoing, approved, rejected, completed, hold)
 
-### 5. Messages RBAC Scoping
-**File:** `src/pages/Messages.tsx`
-- Import `useUserScope` and filter conversations to only include case_ids belonging to scoped patients
+**Bug fix (line 294):** Replace `plans.map(...)` with `(planData || []).map(...)` — use the local variable from the fetch, not the stale state.
 
-### 6. GlobalAssets RBAC Scoping
-**File:** `src/pages/GlobalAssets.tsx`
-- Import `useUserScope` and filter plan_sections + case_requests to only scoped patients for non-admin users
+**RBAC fix:** Remove the `if (isAdmin)` guard around audit_log fetch. For non-admin users, fetch `communications` for this case instead (they can see their own activity). Also fetch `notifications` for the patient's owner to show relevant events.
 
-### 7. Kanban Phases Filter Fix
-**File:** `src/pages/GlobalKanban.tsx`
-- Add `.eq('is_deleted', false)` to the phases query
+### 4. Wire Billing to CRM Contact Details
 
-### 8. Task Management UI
+**File:** `src/pages/Billing.tsx`
+
+In `selectPatient()`, after getting patient's `clinic_name`/`doctor_name`, look up the matching `settings_entities` record to pull full contact details:
+- Set `clientDetails.address` from entity's address fields
+- Set `clientDetails.email` from entity's email
+- Auto-fill GST number from the clinic/doctor entity
+- Auto-fill merchant details from the lab entity (the lab doing the work)
+
+### 5. Task Assignment RBAC
+
 **File:** `src/pages/PatientDetail.tsx`
-- Add a "Tasks" sub-section in the Activity tab or as a new tab
-- CRUD: create task with title, description, assignee (dropdown from allProfiles), due_date, status
-- Display as a checklist with status toggles
-- Requires creating `tasks` table via migration (id, patient_id, title, description, assigned_to, due_date, status, created_at, created_by)
 
-### 9. SubmittedCases Grid/List Toggle
-**File:** `src/pages/SubmittedCases.tsx`
-- Add `viewMode` state and grid/list toggle button
-- Add grid card rendering for case requests
+- For admin: show all profiles (current behavior)
+- For non-admin: show only profiles that are assigned to the same clinic/doctor/lab as the current patient (filter `allProfiles` through user_assignments matching the patient's entities)
+- Also: fetch `allProfiles` for non-admin users too (currently guarded by `if (isAdmin)`)
 
-### 10. NotificationBell Realtime
-**File:** `src/components/NotificationBell.tsx`
-- Add Supabase realtime subscription on `notifications` table filtered by user_id
+### 6. Activity Timeline for Non-Admin Users
+
+**File:** `src/pages/PatientDetail.tsx`
+
+For non-admin users, populate timeline from:
+- `communications` table (messages for this case)
+- `notifications` table filtered to current user
+- Plan remarks (`plan_remarks`) for visible plans
+
+Merge and sort by `created_at` descending.
+
+### 7. Email Notification Status Note
+
+Email integration requires setting up an email domain and scaffolding transactional email edge functions. This is a separate infrastructure step. Current state: notifications are in-app only. Will add a note in the plan about this being a follow-up configuration step, not a code change.
 
 ---
 
 ## Files Modified
 
-1. `src/pages/ClientDashboard.tsx` — RBAC guard, filter draft plans
-2. `src/pages/Dashboard.tsx` — activity timeline, list view expand
-3. `src/pages/GlobalKanban.tsx` — phases is_deleted filter
-4. `src/pages/Messages.tsx` — RBAC scoping
-5. `src/pages/GlobalAssets.tsx` — RBAC scoping
-6. `src/pages/PatientDetail.tsx` — draft plan filtering, task UI
-7. `src/pages/SubmittedCases.tsx` — grid/list toggle
-8. `src/components/NotificationBell.tsx` — realtime subscription
-9. New migration — `tasks` table
+1. **Migration** — Add CRM columns to `settings_entities`
+2. `src/pages/Settings.tsx` — Full CRM contact form with edit, address, GST, search
+3. `src/pages/PatientDetail.tsx` — Fix timeline bug (planIds2), remove admin-only guard, add non-admin timeline sources, fix task RBAC
+4. `src/pages/Billing.tsx` — Fetch entity CRM details for client/merchant auto-population
+5. `src/pages/TeamManagement.tsx` — Show entity contact details in assignment view
 
 ## Implementation Order
 
-1. ClientDashboard RBAC fix + draft plan filter (immediate visibility fix)
-2. Dashboard activity timeline + list view expand
-3. Kanban phases filter
-4. Messages + GlobalAssets RBAC scoping
-5. Draft plan sovereignty in PatientDetail
-6. SubmittedCases grid/list toggle
-7. NotificationBell realtime
-8. Task management (migration + UI)
-
+1. Migration (CRM columns)
+2. Settings CRM upgrade
+3. PatientDetail timeline fix + non-admin timeline
+4. Billing CRM auto-populate
+5. Task assignment RBAC
