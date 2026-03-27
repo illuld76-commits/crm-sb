@@ -237,26 +237,30 @@ export default function PatientDetail() {
     if (phaseData && phaseData.length > 0 && !activePhaseId) {
       setActivePhaseId(phaseData[0].id);
     }
+    let fetchedPlanData: any[] = [];
+    let fetchedRemarkData: any[] = [];
     if (phaseData && phaseData.length > 0) {
       const phaseIds = phaseData.map((ph) => ph.id);
       const { data: planData } = await supabase.from('treatment_plans').select('*').in('phase_id', phaseIds).order('sort_order');
-      setPlans(planData || []);
+      fetchedPlanData = planData || [];
+      setPlans(fetchedPlanData);
 
-      if (planData && planData.length > 0) {
-        const planIds = planData.map((pl) => pl.id);
+      if (fetchedPlanData.length > 0) {
+        const planIds = fetchedPlanData.map((pl) => pl.id);
         const [{ data: sectionData }, { data: remarkData }] = await Promise.all([
         supabase.from('plan_sections').select('*').in('plan_id', planIds).order('sort_order'),
         supabase.from('plan_remarks').select('*').in('plan_id', planIds).order('created_at', { ascending: false })]
         );
         setSections(sectionData || []);
+        fetchedRemarkData = remarkData || [];
 
-        if (remarkData && remarkData.length > 0) {
-          const userIds = [...new Set(remarkData.map((r) => r.user_id))];
+        if (fetchedRemarkData.length > 0) {
+          const userIds = [...new Set(fetchedRemarkData.map((r) => r.user_id))];
           const { data: profileData } = await supabase.from('profiles').select('user_id, display_name').in('user_id', userIds);
           const profileMap: Record<string, string> = {};
           profileData?.forEach((p) => {profileMap[p.user_id] = p.display_name || 'Unknown';});
           setProfiles(profileMap);
-          setRemarks(remarkData.map((r) => ({ ...r, display_name: profileMap[r.user_id] || 'Unknown' })));
+          setRemarks(fetchedRemarkData.map((r) => ({ ...r, display_name: profileMap[r.user_id] || 'Unknown' })));
         } else {
           setRemarks([]);
         }
