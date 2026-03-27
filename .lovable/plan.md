@@ -1,160 +1,112 @@
 
 
-# Comprehensive Enhancement Plan — Presets, Request Types, Workflow & UX
-
-This plan covers all items from the user's request, organized into implementable batches.
+# Holistic Enhancement Plan — Tooth Chart, Navigation, Billing Integration & CRM
 
 ---
 
-## Batch 1: Plan Presets Enhancement (Issue 1)
+## 1. Tooth Chart Improvements
 
-**Goal:** Make the existing plan preset (orthodontic) saveable with a proper name, and add rich section types including tooth movement CSV parser and IPR CSV parser as available section types.
+**Files:** `src/components/ToothChartSelector.tsx`
 
-**Changes — `src/pages/PresetForms.tsx`:**
-- Rename existing plan preset section types from generic text/textarea/radio/checkbox/dropdown to dental-specific types: `ipr_data`, `tooth_movement`, `feasibility`, `images`, `video`, `audio`, `model_analysis`, `cephalometric`, `notes`
-- Each section type maps to what PlanEditor already supports — when a plan is created from a preset, these sections are auto-added
-- Add a "Save as Orthodontic Plan" default preset with all current PlanEditor sections pre-configured
-- Save the preset with `category: 'plan_preset'` and section definitions in the `fields` JSON column
-
----
-
-## Batch 2: Request Types as Preset Items + Work Order Form Linking (Issue 2)
-
-**Goal:** Request types should be manageable in Presets. Each request type links to a work order form preset. Users select request types with qty in case submission, and the corresponding form loads.
-
-**Changes — `src/pages/PresetForms.tsx`:**
-- Add a new tab **"Request Types"** (`request_type` category)
-- Each request type preset has: name, description, linked work order preset ID(s), linked plan preset ID, fee
-- Admin can create/edit request types and associate existing work order form presets
-
-**Changes — `src/pages/CaseSubmission.tsx`:**
-- Replace the hardcoded request type dropdown with dynamic list from `presets` where `category = 'request_type'` (fallback to work_order presets + hardcoded defaults for backward compat)
-- Allow **multiple request types** selection, each with a quantity input
-- When a request type is selected, load its linked work order form preset and render the dynamic form fields for user to fill
-- Store selected request types + quantities + form data in `case_request.dynamic_data`
-
-**Changes — `src/pages/CaseSubmission.tsx` (admin accept flow):**
-- When admin accepts a case request, auto-select the plan preset linked to the submitted request type(s)
-- Admin can override/change the plan preset before conversion
-- Case name derives from request type name(s)
-- Each request type can generate a separate plan under the case
+- Add **deciduous dentition** (primary teeth: 55-51, 61-65 upper; 85-81, 71-75 lower) as a toggle section below permanent teeth, same arch layout
+- Make SVG **responsive** with proper viewBox scaling for mobile (use `w-full` container, reduce viewBox width on small screens)
+- Add **Shift+Click range selection**: track `lastClickedTooth`, on shift+click select all teeth between last and current in same arch
+- Improve readability: larger tooth labels, better spacing, color contrast
+- Add **form preview mode** in PresetForms: when building a work order form with `tooth_chart` field, show a read-only rendered preview of the form
 
 ---
 
-## Batch 3: Interactive Tooth Chart for Work Order Forms (Issue 2 continued)
+## 2. Patient Search Dropdown Fix
 
-**Goal:** For non-orthodontic dental work (crowns, bridges, veneers, splints), provide an interactive tooth chart in work order form presets where users click teeth and assign work types.
+**Files:** `src/pages/CaseSubmission.tsx`, `src/pages/Billing.tsx`
 
-**Changes — New component `src/components/ToothChartSelector.tsx`:**
-- Interactive Palmer notation diagram (reuse `PalmerArchDiagram` patterns)
-- Click individual teeth or drag-select ranges
-- For each selection, user picks work type (crown, bridge, veneer, splint, etc.) from a dropdown
-- Displays a summary table: teeth selected → work type → notes
-- Outputs structured JSON for storage in `dynamic_data`
-
-**Changes — `src/pages/PresetForms.tsx`:**
-- Add `tooth_chart` as a new field type in work order form builder
-- When this field type is added to a form, the ToothChartSelector renders at submission time
-
-**Changes — `src/pages/CaseSubmission.tsx`:**
-- Render `ToothChartSelector` when a work order form contains a `tooth_chart` field
+- The dropdown results div exists (lines 483-492) but needs better UX: add `max-h-48 overflow-y-auto` and ensure it shows on focus even when results exist
+- Show dropdown immediately when input is focused if there are cached results
+- Add a "No results found" state when search returns empty with 2+ chars
 
 ---
 
-## Batch 4: Multi-Request Case Conversion + Invoicing Link (Issue 2 continued)
+## 3. Case Request → Plan/Phase Auto-Creation
 
-**Changes — `src/pages/CaseSubmission.tsx` (updateStatus):**
-- When converting to case, create one plan per request type using the linked plan preset
-- Plan names = request type names
-- Store `case_request_id` on each plan for invoicing linkage
+**Files:** `src/pages/CaseSubmission.tsx`
 
-**Changes — `src/pages/Billing.tsx`:**
-- When creating invoice from a case that has `case_request_id`, auto-populate line items from request types + quantities + fees from presets
+- When a case request is accepted and linked to a patient, the `updateStatus('accepted')` creates a patient + initial phase but **no plan**
+- Fix: After creating the phase, also create a treatment plan using the linked plan preset (from request type's `discount_value` field which stores plan preset ID)
+- If no plan preset linked, create a default plan with the request type name
 
 ---
 
-## Batch 5: Archives Completeness (Issue 2 tail)
+## 4. Plan Preset Linking in Request Types
 
-**Changes — `src/pages/AdminArchives.tsx`:**
-- Verify all entity types with `is_deleted` flag appear in archives
-- Currently missing: communications (no `is_deleted` column). Add client-side note that communications archival requires DB migration.
-- Ensure soft-delete is called (not hard-delete) across all delete actions in the app
+**Files:** `src/pages/PresetForms.tsx`
 
-**Audit across files:** Check all `delete()` calls and convert to `update({ is_deleted: true })` where applicable for: plans, phases, case_requests, invoices, assets, entities.
-
----
-
-## Batch 6: Unpublish Plans + Admin Controls (Issue from request)
-
-**Changes — `src/pages/PlanEditor.tsx`:**
-- Add "Unpublish" button for admin when plan status is `published`
-- Sets status back to `saved`, removes public share link access
-- Add confirmation dialog before unpublishing
+- The "Linked Work Order Form" and "Linked Plan Preset" dropdowns exist (lines 454-474) but the `discount_value` is used to store the plan preset ID as a number — it needs to store the UUID string
+- Fix: Store linked IDs in the `fields` JSON array or use `description` field for plan preset ID, keeping `unit` for work order ID
+- Show the orthodontic plan preset that was created — ensure plan presets with `category: 'plan_preset'` appear in the dropdown
+- Add ability to add **any treatment plan type** (not just orthodontic) — the plan preset system already supports this, just needs better UX
 
 ---
 
-## Batch 7: User Dashboard Enhancements (Issue from request)
+## 5. Sidebar Navigation Restructure
 
-**Changes — `src/pages/UserDashboard.tsx`:**
-- Add case status badges, published plan count, and quick status summary per case card
-- Add expandable/collapsible phase→plan tree view (similar to admin Dashboard's `renderExpandedPhases`)
-- Add navigation to plan view and share link copy for published plans
+**Files:** `src/components/Sidebar.tsx`
 
----
-
-## Batch 8: User Kanban Access (Issue from request)
-
-**Changes — `src/pages/GlobalKanban.tsx`:**
-- Already partially done. Verify non-admin users see only RBAC-filtered cases/plans
-- Add Kanban link to user's `BottomNav` and sidebar
-
-**Changes — `src/components/Sidebar.tsx` and `src/components/BottomNav.tsx`:**
-- Add Kanban route for non-admin users
+- Restructure the bottom section into a **"Cases" mega-section** that expands to show two sub-sections:
+  - **Case Requests** (with count badge, expandable list with status dots)
+  - **Cases** (patient list with phase/plan tree)
+- Add a dedicated "Case Requests" quick-link button in the top nav links
+- Add `max-h` with scroll for long lists to prevent overflow
+- Truncate long names with `truncate` class (already done for most)
 
 ---
 
-## Batch 9: Activity Logs & Notifications Integration (Issue from request)
+## 6. Quick Navigation Header Dropdown
 
-**Changes — audit `logAction` calls across:**
-- `CaseSubmission.tsx`: Log on accept, reject, convert, status change with `target_type: 'case_request'`
-- `PlanEditor.tsx`: Log on publish, unpublish, save with `target_type: 'plan'`
-- `Billing.tsx`: Log on invoice create/send with `target_type: 'invoice'`
-- Ensure `target_name` includes case name and request type for context
+**Files:** `src/components/Header.tsx`
 
-**Changes — `src/lib/notifications.ts`:**
-- Verify `sendNotification` is called at key points
-- Add notification on plan publish, case status change, invoice sent
-
-**Changes — `src/pages/UserDashboard.tsx`:**
-- Show recent activity logs for user's own cases (filtered by RBAC)
+- Add a **searchable dropdown** in the header (next to title) for quick navigation
+- When on a patient/case page, shows dropdown with all accessible cases, phases, plans
+- Live search filters the list
+- Clicking navigates to that entity without leaving current view context
 
 ---
 
-## Batch 10: Relational Navigation Verification
+## 7. Billing ↔ Work Order/Phase Integration
 
-**Changes across all pages:**
-- Verify `useRelationalNav().openPreview()` calls exist on clickable entity references (invoices, plans, cases, case requests)
-- Add missing relational links in Dashboard cards, Kanban cards, Billing rows, and Messages
+**Files:** `src/pages/Billing.tsx`
+
+- When patient is selected, fetch their phases and plans
+- Add phase/plan selector dropdown
+- Auto-populate line items from linked case request's request type + fees from presets
+- Add "Add from Presets" button that shows fee/item presets for quick insertion (like SuiteDash-style item picker)
+- Show existing preset items in a searchable dropdown to avoid billing errors
+
+---
+
+## 8. Quick-Add Sections Saveable as Templates
+
+**Files:** `src/pages/PlanEditor.tsx`
+
+- Add "Save as Template" button in PlanEditor that saves current section configuration as a new plan preset
+- Links back to PresetForms for management
 
 ---
 
 ## Implementation Priority
 
-1. **Batch 1** — Plan presets with proper section types
-2. **Batch 2** — Request types + work order form linking
-3. **Batch 3** — Tooth chart component
-4. **Batch 4** — Multi-request conversion + invoicing
-5. **Batch 6** — Unpublish plans
-6. **Batch 7** — User dashboard enhancements
-7. **Batch 8** — User Kanban access
-8. **Batch 5** — Archives completeness
-9. **Batch 9** — Activity logs & notifications
-10. **Batch 10** — Relational navigation
+1. Tooth chart (deciduous + mobile + shift-select + preview)
+2. Patient search dropdown fix
+3. Case request → auto-create plan on accept
+4. Plan preset linking fix in request types
+5. Sidebar restructure
+6. Header quick navigation
+7. Billing preset item integration
+8. Save sections as template
 
 ## Technical Notes
 
-- **Files modified:** ~10 existing files
-- **New files:** 1 (`ToothChartSelector.tsx`)
-- **No DB migrations needed** — all data stored in existing JSON columns (`fields`, `dynamic_data`)
-- **Backward compatible** — existing presets and case requests continue working; new request type presets are additive
+- ~8 files modified, no new files needed
+- No DB migrations — all data fits in existing JSON columns
+- Backward compatible with existing presets and case requests
+- The `discount_value` field hack for storing plan preset ID should be replaced with proper storage in `fields` JSON
 
