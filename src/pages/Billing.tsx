@@ -84,6 +84,7 @@ export default function Billing() {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [presets, setPresets] = useState<Preset[]>([]);
+  const [allPresets, setAllPresets] = useState<Preset[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [showReceiptForm, setShowReceiptForm] = useState(false);
@@ -127,13 +128,21 @@ export default function Billing() {
   // Patient search
   const [patientSearch, setPatientSearch] = useState('');
   const [patientResults, setPatientResults] = useState<{ id: string; patient_name: string; doctor_name: string | null; clinic_name: string | null }[]>([]);
+  const [patientSearchFocused, setPatientSearchFocused] = useState(false);
+
+  // Phase/Plan data for selected patient
+  const [patientPhases, setPatientPhases] = useState<{ id: string; phase_name: string }[]>([]);
+  const [patientPlans, setPatientPlans] = useState<{ id: string; plan_name: string; phase_id: string }[]>([]);
+  const [showPresetPicker, setShowPresetPicker] = useState(false);
 
   // User assignment
   const [allProfiles, setAllProfiles] = useState<{ user_id: string; display_name: string | null }[]>([]);
 
   useEffect(() => {
-    supabase.from('presets').select('*').eq('category', 'fee_item').order('name').then(({ data }) => {
-      setPresets((data || []) as unknown as Preset[]);
+    supabase.from('presets').select('*').order('name').then(({ data }) => {
+      const all = (data || []) as unknown as Preset[];
+      setAllPresets(all);
+      setPresets(all.filter(p => p.category === 'fee' || p.category === 'item' || p.category === 'fee_item'));
     });
     if (isAdmin) {
       supabase.from('profiles').select('user_id, display_name').then(({ data }) => setAllProfiles(data || []));
@@ -209,6 +218,16 @@ export default function Billing() {
     setClientDetails(prev => ({ ...prev, name: p.patient_name }));
     setPatientSearch('');
     setPatientResults([]);
+    // Fetch phases and plans for the patient
+    supabase.from('phases').select('id, phase_name').eq('patient_id', p.id).order('phase_order').then(({ data }) => {
+      setPatientPhases(data || []);
+      if (data && data.length > 0) {
+        setPhaseId(data[0].id);
+        supabase.from('treatment_plans').select('id, plan_name, phase_id').in('phase_id', data.map(d => d.id)).then(({ data: plans }) => {
+          setPatientPlans((plans || []) as any);
+        });
+      }
+    });
   };
 
   const currencySymbol = CURRENCIES.find(c => c.code === currency)?.symbol || currency;
@@ -428,15 +447,20 @@ export default function Billing() {
                     onChange={e => { if (!isEditable) return; setPatientName(e.target.value); setPatientSearch(e.target.value); }}
                     placeholder="Search or type patient name..."
                     disabled={!isEditable}
+                    onFocus={() => setPatientSearchFocused(true)}
+                    onBlur={() => setTimeout(() => setPatientSearchFocused(false), 200)}
                   />
-                  {patientResults.length > 0 && isEditable && (
-                    <div className="absolute z-10 w-full mt-1 bg-popover border rounded-md shadow-md">
-                      {patientResults.map(p => (
+                  {patientSearchFocused && patientSearch.length >= 2 && (
+                    <div className="absolute z-10 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
+                      {patientResults.length > 0 ? patientResults.map(p => (
                         <div key={p.id} className="px-3 py-2 text-sm hover:bg-accent cursor-pointer" onClick={() => selectPatient(p)}>
                           <span className="font-medium">{p.patient_name}</span>
                           {p.doctor_name && <span className="text-muted-foreground"> • {p.doctor_name}</span>}
+                          {p.clinic_name && <span className="text-muted-foreground text-xs"> • {p.clinic_name}</span>}
                         </div>
-                      ))}
+                      )) : (
+                        <div className="px-3 py-2 text-sm text-muted-foreground">No patients found</div>
+                      )}
                     </div>
                   )}
                 </div>
