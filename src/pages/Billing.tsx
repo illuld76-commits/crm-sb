@@ -591,7 +591,32 @@ export default function Billing() {
                     </div>
                   );
                 })}
-                {isEditable && <Button variant="outline" size="sm" className="text-xs" onClick={addItem}><Plus className="w-3 h-3 mr-1" /> Add Item</Button>}
+                {isEditable && (
+                  <div className="flex gap-2 flex-wrap">
+                    <Button variant="outline" size="sm" className="text-xs" onClick={addItem}><Plus className="w-3 h-3 mr-1" /> Add Item</Button>
+                    <Button variant="outline" size="sm" className="text-xs" onClick={() => setShowPresetPicker(!showPresetPicker)}>
+                      <DollarSign className="w-3 h-3 mr-1" /> Add from Presets
+                    </Button>
+                  </div>
+                )}
+                {showPresetPicker && (
+                  <div className="border rounded-lg p-3 bg-muted/20 space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">Select preset items to add:</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                      {allPresets.filter(p => ['fee', 'item', 'fee_item', 'request_type'].includes(p.category)).map(p => (
+                        <div key={p.id} className="flex items-center justify-between p-2 rounded border border-border/50 hover:bg-accent/50 cursor-pointer text-xs"
+                          onClick={() => {
+                            applyPreset(p);
+                            toast.success(`Added: ${p.name}`);
+                          }}>
+                          <span className="font-medium truncate">{p.name}</span>
+                          <span className="text-muted-foreground shrink-0">{currencySymbol}{p.unit_price || p.fee_usd || 0}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <Button variant="ghost" size="sm" className="text-xs" onClick={() => setShowPresetPicker(false)}>Close</Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
