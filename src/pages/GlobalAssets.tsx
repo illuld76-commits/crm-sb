@@ -98,8 +98,10 @@ export default function GlobalAssets() {
         : { data: [] };
       const patientIds = [...new Set((phases || []).map(p => p.patient_id))];
       const { data: patients } = patientIds.length > 0
-        ? await supabase.from('patients').select('id, patient_name').in('id', patientIds)
+        ? await supabase.from('patients').select('id, patient_name, clinic_name, doctor_name, lab_name, company_name, user_id, primary_user_id, secondary_user_id').in('id', patientIds)
         : { data: [] };
+      const scopedSectionPatients = isAdmin ? (patients || []) : (patients || []).filter(p => canAccessPatient(p));
+      const scopedSectionPatientIds = new Set(scopedSectionPatients.map(p => p.id));
 
       const planMap: Record<string, any> = {};
       (plans || []).forEach(p => { planMap[p.id] = p; });
