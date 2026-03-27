@@ -238,18 +238,40 @@ export default function CaseSubmission() {
           phase_order: nextOrder,
         }).select('id').single();
 
-        // Create plan named after the request type, linked to preset
+        // Create plan named after the request type, store preset info in notes
         if (newPhase) {
+          const notesJson = JSON.stringify({
+            source: 'case_request',
+            case_request_id: id,
+            request_type: requestTypeName,
+            plan_preset_id: planPresetId || null,
+          });
           await supabase.from('treatment_plans').insert({
             phase_id: newPhase.id,
             plan_name: planName,
             plan_date: new Date().toISOString().split('T')[0],
-            notes: `Auto-created from case request: ${requestTypeName}`,
+            notes: notesJson,
             status: 'draft',
           } as any);
         }
 
+        // Copy case request attachments to assets table
+        const caseAttachments = caseData!.attachments || [];
+        if (caseAttachments.length > 0) {
+          const assetInserts = caseAttachments.map((att: any) => ({
+            case_id: patientIdToLink!,
+            file_url: att.url,
+            file_type: att.type || 'application/octet-stream',
+            original_name: att.name,
+            category: 'case_request_attachment',
+            is_viewable: true,
+            is_downloadable: true,
+          }));
+          await supabase.from('assets').insert(assetInserts);
+        }
+
         toast.success('Project, phase, and plan created');
+        navigate(`/patient/${patientIdToLink}`);
       }
     }
 
@@ -407,13 +429,33 @@ export default function CaseSubmission() {
                         if (!error && newPatient) {
                           const { data: newPhase } = await supabase.from('phases').insert({ patient_id: newPatient.id, phase_name: caseData.patient_name, phase_order: 0 }).select('id').single();
                           if (newPhase) {
+                            const notesJson = JSON.stringify({
+                              source: 'case_request',
+                              case_request_id: id,
+                              request_type: requestTypeName,
+                              plan_preset_id: planPresetId || null,
+                            });
                             await supabase.from('treatment_plans').insert({
                               phase_id: newPhase.id,
                               plan_name: planName,
                               plan_date: new Date().toISOString().split('T')[0],
-                              notes: `Auto-created from case request: ${requestTypeName}`,
+                              notes: notesJson,
                               status: 'draft',
                             } as any);
+                          }
+                          // Copy case request attachments to assets
+                          const caseAttachments = caseData.attachments || [];
+                          if (caseAttachments.length > 0) {
+                            const assetInserts = caseAttachments.map((att: any) => ({
+                              case_id: newPatient.id,
+                              file_url: att.url,
+                              file_type: att.type || 'application/octet-stream',
+                              original_name: att.name,
+                              category: 'case_request_attachment',
+                              is_viewable: true,
+                              is_downloadable: true,
+                            }));
+                            await supabase.from('assets').insert(assetInserts);
                           }
                           await supabase.from('case_requests').update({ patient_id: newPatient.id }).eq('id', id);
                           toast.success('Project created with phase and plan');
@@ -497,12 +539,30 @@ export default function CaseSubmission() {
           {caseData.dynamic_data && Object.keys(caseData.dynamic_data).length > 0 && (
             <Card>
               <CardHeader className="pb-3"><CardTitle className="text-sm">Additional Details</CardTitle></CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  {Object.entries(caseData.dynamic_data).map(([key, val]) => (
-                    <div key={key}><span className="text-muted-foreground text-xs block capitalize">{key.replace(/_/g, ' ')}</span><span>{String(val)}</span></div>
-                  ))}
-                </div>
+              <CardContent className="space-y-4">
+                {Object.entries(caseData.dynamic_data).map(([key, val]) => {
+                  if (key === 'tooth_chart' && Array.isArray(val)) {
+                    return (
+                      <div key={key}>
+                        <span className="text-muted-foreground text-xs block capitalize mb-2">Tooth Chart</span>
+                        <ToothChartSelector value={val as ToothSelection[]} onChange={() => {}} readOnly />
+                      </div>
+                    );
+                  }
+                  if (Array.isArray(val)) {
+                    return (
+                      <div key={key}>
+                        <span className="text-muted-foreground text-xs block capitalize">{key.replace(/_/g, ' ')}</span>
+                        <span className="text-sm">{val.join(', ')}</span>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={key} className="grid grid-cols-2 gap-3 text-sm">
+                      <div><span className="text-muted-foreground text-xs block capitalize">{key.replace(/_/g, ' ')}</span><span>{String(val)}</span></div>
+                    </div>
+                  );
+                })}
               </CardContent>
             </Card>
           )}

@@ -255,13 +255,32 @@ export default function PatientDetail() {
       }
     }
 
-    // Fetch invoices, audit logs, and assets for this case
-    const [{ data: invData }, { data: assetData }] = await Promise.all([
+    // Fetch invoices, audit logs, assets, and case request attachments
+    const [{ data: invData }, { data: assetData }, { data: caseReqData }] = await Promise.all([
     supabase.from('invoices').select('id, amount_usd, status, created_at, patient_name, display_id, type').eq('patient_id', patientId).order('created_at', { ascending: false }),
-    supabase.from('assets').select('*').eq('case_id', patientId).order('created_at', { ascending: false })]
+    supabase.from('assets').select('*').eq('case_id', patientId).order('created_at', { ascending: false }),
+    supabase.from('case_requests').select('attachments').eq('patient_id', patientId).eq('is_deleted', false)]
     );
     setInvoices(invData || []);
-    setAssets(assetData || []);
+
+    // Merge case request attachments into assets
+    const caseReqAssets: AssetRow[] = [];
+    (caseReqData || []).forEach((cr: any) => {
+      const attachments = cr.attachments || [];
+      attachments.forEach((att: any, idx: number) => {
+        caseReqAssets.push({
+          id: `cr-att-${idx}-${att.name}`,
+          file_url: att.url,
+          file_type: att.type || 'application/octet-stream',
+          category: 'case_request_attachment',
+          original_name: att.name,
+          is_viewable: true,
+          is_downloadable: true,
+          created_at: new Date().toISOString(),
+        });
+      });
+    });
+    setAssets([...(assetData || []), ...caseReqAssets]);
     if (isAdmin) {
       const phaseIds2 = (phaseData || []).map((ph) => ph.id);
       const planIds2 = plans.map((pl) => pl.id);
