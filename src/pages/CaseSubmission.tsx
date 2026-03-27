@@ -232,8 +232,7 @@ export default function CaseSubmission() {
             plan_date: new Date().toISOString().split('T')[0],
             notes: `Auto-created from case request: ${requestTypeName}`,
             status: 'draft',
-            case_request_id: id,
-          });
+          } as any);
         }
 
         toast.success('Project, phase, and plan created');
