@@ -125,9 +125,9 @@ export default function PlanEditor() {
 
   const autoLoadPresetFromPhase = async (pId: string) => {
     // Check if phase was created from a case request by finding a plan with case_request_id
-    const { data: existingPlans } = await supabase.from('treatment_plans').select('case_request_id, plan_name').eq('phase_id', pId).not('case_request_id', 'is', null).limit(1);
+    const { data: existingPlans } = await (supabase.from('treatment_plans').select('*') as any).eq('phase_id', pId).not('case_request_id', 'is', null).limit(1);
     if (existingPlans && existingPlans.length > 0) {
-      const crId = existingPlans[0].case_request_id;
+      const crId = (existingPlans[0] as any).case_request_id;
       const { data: caseReq } = await supabase.from('case_requests').select('request_type').eq('id', crId).single();
       if (caseReq) {
         // Find the request type preset and its linked plan preset
