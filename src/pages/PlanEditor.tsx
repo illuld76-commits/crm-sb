@@ -917,6 +917,26 @@ export default function PlanEditor() {
           </Card>
         )}
 
+        {/* Plan Preset Selector */}
+        {isEditing && planPresets.length > 0 && (
+          <Card className="border-primary/20 bg-primary/5">
+            <CardContent className="p-3 flex items-center gap-3">
+              <BookTemplate className="w-4 h-4 text-primary shrink-0" />
+              <span className="text-xs font-medium text-muted-foreground">Load Preset:</span>
+              <Select value={selectedPresetId || '__none__'} onValueChange={v => { if (v !== '__none__') loadPresetById(v); }}>
+                <SelectTrigger className="h-8 text-xs w-48"><SelectValue placeholder="Select preset..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  {planPresets.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {selectedPresetId && (
+                <Badge variant="secondary" className="text-[10px]">Active: {planPresets.find(p => p.id === selectedPresetId)?.name}</Badge>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Upload Bar */}
         {isEditing && (
           <Card className="border-dashed border-2 border-primary/30 bg-primary/5">

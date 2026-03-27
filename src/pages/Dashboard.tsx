@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useUserScope } from '@/hooks/useUserScope';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -56,6 +57,7 @@ interface PlanRow {
 
 export default function Dashboard() {
   const { user, signOut } = useAuth();
+  const { canAccessPatient, isAdmin, loading: scopeLoading } = useUserScope();
   const navigate = useNavigate();
   const [patients, setPatients] = useState<PatientRow[]>([]);
   const [phases, setPhases] = useState<PhaseRow[]>([]);
@@ -90,7 +92,10 @@ export default function Dashboard() {
       .order('created_at', { ascending: false });
 
     if (error) { toast.error('Failed to load cases'); setLoading(false); return; }
-    setPatients(patientData || []);
+
+    // RBAC: filter patients for non-admin users
+    const scopedPatients = isAdmin ? (patientData || []) : (patientData || []).filter(p => canAccessPatient(p));
+    setPatients(scopedPatients);
 
     if (patientData && patientData.length > 0) {
       const patientIds = patientData.map(p => p.id);
