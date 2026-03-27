@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
@@ -13,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
-import { Search, CreditCard, Download, ArrowUpDown, Plus, TrendingUp, CheckCircle, Clock, AlertCircle, BookOpen } from 'lucide-react';
+import { Search, CreditCard, Download, ArrowUpDown, Plus, TrendingUp, CheckCircle, Clock, AlertCircle, BookOpen, Trash2, LayoutGrid, List } from 'lucide-react';
 import { useRelationalNav } from '@/hooks/useRelationalNav';
 
 type SortOption = 'date_desc' | 'date_asc' | 'amount_asc' | 'amount_desc' | 'name_az' | 'name_za';
@@ -45,6 +46,14 @@ export default function BillingList() {
   const [sortBy, setSortBy] = useState<SortOption>('date_desc');
   const [filterStatus, setFilterStatus] = useState('all');
   const [ledgerPatient, setLedgerPatient] = useState<{ name: string; id: string } | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+
+  const deleteInvoice = async (id: string) => {
+    if (!confirm('Delete this invoice? It will be moved to Archives.')) return;
+    await supabase.from('invoices').update({ is_deleted: true } as any).eq('id', id);
+    setInvoices(prev => prev.filter(i => i.id !== id));
+    toast.success('Invoice deleted');
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -210,6 +219,10 @@ export default function BillingList() {
                 <SelectItem value="amount_asc">Low→High</SelectItem>
               </SelectContent>
             </Select>
+            <div className="flex items-center border rounded-md overflow-hidden">
+              <Button variant={viewMode === 'list' ? 'secondary' : 'ghost'} size="sm" className="h-8 rounded-none" onClick={() => setViewMode('list')}><List className="w-3 h-3" /></Button>
+              <Button variant={viewMode === 'grid' ? 'secondary' : 'ghost'} size="sm" className="h-8 rounded-none" onClick={() => setViewMode('grid')}><LayoutGrid className="w-3 h-3" /></Button>
+            </div>
             {isAdmin && <Button variant="outline" size="sm" className="h-8 text-xs" onClick={exportCSV}><Download className="w-3 h-3 mr-1" /> CSV</Button>}
             {isAdmin && <Button size="sm" className="h-8 text-xs" onClick={() => navigate('/billing/new')}><Plus className="w-3 h-3 mr-1" /> New Invoice</Button>}
           </div>
@@ -221,7 +234,7 @@ export default function BillingList() {
             <CreditCard className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
             <p className="text-muted-foreground">No invoices found</p>
           </div>
-        ) : (
+        ) : viewMode === 'list' ? (
           <div className="space-y-2">
             {filtered.map(inv => (
               <Card key={inv.id} className="hover:shadow-md transition-shadow">
@@ -247,6 +260,38 @@ export default function BillingList() {
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); setLedgerPatient({ name: inv.patient_name, id: inv.patient_id || '' }); }} title="View ledger">
                       <BookOpen className="w-3.5 h-3.5" />
                     </Button>
+                    {isAdmin && (
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={(e) => { e.stopPropagation(); deleteInvoice(inv.id); }} title="Delete">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filtered.map(inv => (
+              <Card key={inv.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate(`/billing/${inv.id}`)}>
+                <CardContent className="p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-sm truncate">{inv.patient_name}</span>
+                    <Badge className={`text-[10px] ${statusColor(inv.status)}`}>{inv.status.replace('_', ' ')}</Badge>
+                  </div>
+                  {inv.invoice_number && <p className="text-[10px] font-mono text-muted-foreground">{inv.invoice_number}</p>}
+                  <p className="text-lg font-bold">₹{inv.amount_usd.toLocaleString()}</p>
+                  <p className="text-[10px] text-muted-foreground">{format(new Date(inv.created_at), 'MMM d, yyyy')}</p>
+                  {inv.balance_due > 0 && <p className="text-xs text-destructive">Balance: ₹{inv.balance_due.toLocaleString()}</p>}
+                  <div className="flex items-center gap-1 pt-1" onClick={e => e.stopPropagation()}>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setLedgerPatient({ name: inv.patient_name, id: inv.patient_id || '' })} title="Ledger">
+                      <BookOpen className="w-3 h-3" />
+                    </Button>
+                    {isAdmin && (
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => deleteInvoice(inv.id)} title="Delete">
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
