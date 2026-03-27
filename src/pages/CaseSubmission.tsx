@@ -393,8 +393,7 @@ export default function CaseSubmission() {
                               plan_date: new Date().toISOString().split('T')[0],
                               notes: `Auto-created from case request: ${requestTypeName}`,
                               status: 'draft',
-                              case_request_id: id,
-                            });
+                            } as any);
                           }
                           await supabase.from('case_requests').update({ patient_id: newPatient.id }).eq('id', id);
                           toast.success('Project created with phase and plan');
