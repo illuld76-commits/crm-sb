@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
+import { useUserScope } from '@/hooks/useUserScope';
 import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
 import { Card, CardContent } from '@/components/ui/card';
@@ -33,6 +34,7 @@ const CATEGORIES = ['All', 'Photo', 'X-Ray', 'STL', 'Video', 'Document', 'Audio'
 export default function GlobalAssets() {
   const { user } = useAuth();
   const { isAdmin } = useRole();
+  const { canAccessPatient, loading: scopeLoading } = useUserScope();
   const [assets, setAssets] = useState<AssetRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -41,8 +43,8 @@ export default function GlobalAssets() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   useEffect(() => {
-    fetchAssets();
-  }, []);
+    if (!scopeLoading) fetchAssets();
+  }, [scopeLoading]);
 
   const fetchAssets = async () => {
     const allAssets: AssetRow[] = [];
@@ -57,11 +59,14 @@ export default function GlobalAssets() {
     if (assetData) {
       const caseIds = [...new Set(assetData.map(a => a.case_id).filter(Boolean))];
       let patientMap: Record<string, string> = {};
+      let scopedCaseIds = new Set<string>();
       if (caseIds.length > 0) {
-        const { data: patients } = await supabase.from('patients').select('id, patient_name').in('id', caseIds);
-        patients?.forEach(p => { patientMap[p.id] = p.patient_name; });
+        const { data: patients } = await supabase.from('patients').select('id, patient_name, clinic_name, doctor_name, lab_name, company_name, user_id, primary_user_id, secondary_user_id').in('id', caseIds);
+        const scopedPatients = isAdmin ? (patients || []) : (patients || []).filter(p => canAccessPatient(p));
+        scopedPatients.forEach(p => { patientMap[p.id] = p.patient_name; scopedCaseIds.add(p.id); });
       }
-      assetData.forEach(a => {
+      const scopedAssetData = isAdmin ? assetData : assetData.filter(a => !a.case_id || scopedCaseIds.has(a.case_id));
+      scopedAssetData.forEach(a => {
         allAssets.push({
           id: a.id,
           file_url: a.file_url,
