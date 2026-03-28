@@ -98,6 +98,21 @@ export default function CaseSubmission() {
     }
   }, [id]);
 
+  // Auto-sync: when request_type changes, add it to selectedRequestTypes if not already there
+  useEffect(() => {
+    if (!formData.request_type || formData.request_type === 'Other') return;
+    const alreadyAdded = selectedRequestTypes.some(rt => rt.name === formData.request_type);
+    if (!alreadyAdded) {
+      const preset = presets.find(p => p.category === 'request_type' && p.name === formData.request_type);
+      setSelectedRequestTypes(prev => [...prev, {
+        presetId: preset?.id || '',
+        name: formData.request_type,
+        qty: 1,
+        fee: preset?.fee_usd || preset?.unit_price || 0,
+      }]);
+    }
+  }, [formData.request_type]);
+
   // Patient search (RBAC-scoped) — show dropdown on focus, filter as user types
   useEffect(() => {
     if (!patientSearchFocused) { setPatientResults([]); return; }
