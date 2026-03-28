@@ -204,17 +204,20 @@ export default function Billing() {
     }
   }, [invoiceId, isNew, searchParams]);
 
-  // Patient search (RBAC-scoped)
+  // Patient search (RBAC-scoped) — show dropdown on focus
   useEffect(() => {
-    if (patientSearch.length < 2) { setPatientResults([]); return; }
+    if (!patientSearchFocused) { setPatientResults([]); return; }
     const t = setTimeout(async () => {
-      const { data } = await supabase.from('patients').select('id, patient_name, doctor_name, clinic_name, lab_name, company_name, user_id, primary_user_id, secondary_user_id')
-        .ilike('patient_name', `%${patientSearch}%`).limit(20);
+      let query = supabase.from('patients').select('id, patient_name, doctor_name, clinic_name, lab_name, company_name, user_id, primary_user_id, secondary_user_id');
+      if (patientSearch.length >= 1) {
+        query = query.ilike('patient_name', `%${patientSearch}%`);
+      }
+      const { data } = await query.limit(20);
       const results = (data || []).filter(p => canAccessPatient(p));
-      setPatientResults(results.slice(0, 5));
-    }, 300);
+      setPatientResults(results.slice(0, 10));
+    }, 200);
     return () => clearTimeout(t);
-  }, [patientSearch, canAccessPatient]);
+  }, [patientSearch, patientSearchFocused, canAccessPatient]);
 
   const selectPatient = async (p: typeof patientResults[0]) => {
     setPatientId(p.id);
@@ -589,7 +592,7 @@ export default function Billing() {
                     onFocus={() => setPatientSearchFocused(true)}
                     onBlur={() => setTimeout(() => setPatientSearchFocused(false), 200)}
                   />
-                  {patientSearchFocused && patientSearch.length >= 2 && (
+                  {patientSearchFocused && (
                     <div className="absolute z-10 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
                       {patientResults.length > 0 ? patientResults.map(p => (
                         <div key={p.id} className="px-3 py-2 text-sm hover:bg-accent cursor-pointer" onClick={() => selectPatient(p)}>
