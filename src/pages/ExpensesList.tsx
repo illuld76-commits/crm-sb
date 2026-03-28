@@ -58,7 +58,17 @@ export default function ExpensesList() {
       const { data } = await query;
       let rows = (data || []) as unknown as ExpenseRow[];
       if (!isAdmin) {
-        rows = rows.filter(r => (r as any).user_id === user.id);
+        // Show own expenses + expenses linked to invoices where user is secondary
+        const expInvoiceIds = [...new Set(rows.filter(r => r.invoice_id).map(r => r.invoice_id!))];
+        let secondaryInvoiceIds = new Set<string>();
+        if (expInvoiceIds.length > 0) {
+          const { data: invData } = await supabase.from('invoices').select('id, secondary_user_ids').in('id', expInvoiceIds);
+          (invData || []).forEach((inv: any) => {
+            const secIds = Array.isArray(inv.secondary_user_ids) ? inv.secondary_user_ids : [];
+            if (secIds.includes(user.id)) secondaryInvoiceIds.add(inv.id);
+          });
+        }
+        rows = rows.filter(r => r.user_id === user.id || (r.invoice_id && secondaryInvoiceIds.has(r.invoice_id)));
       }
       setExpenses(rows);
       setLoading(false);

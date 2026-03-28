@@ -58,7 +58,7 @@ export default function BillingList() {
   useEffect(() => {
     if (!user) return;
     const fetchInvoices = async () => {
-      const { data } = await supabase.from('invoices').select('id, patient_name, patient_id, amount_usd, balance_due, status, created_at, type, display_id, invoice_number, due_date, case_request_id, is_deleted, user_id')
+      const { data } = await supabase.from('invoices').select('id, patient_name, patient_id, amount_usd, balance_due, status, created_at, type, display_id, invoice_number, due_date, case_request_id, is_deleted, user_id, secondary_user_ids')
         .eq('is_deleted', false).order('created_at', { ascending: false });
 
       let rows = (data || []).map((d: any) => ({
@@ -67,22 +67,28 @@ export default function BillingList() {
         created_at: d.created_at, type: d.type || 'invoice',
         display_id: d.display_id, invoice_number: d.invoice_number, due_date: d.due_date,
         case_request_id: d.case_request_id, user_id: d.user_id,
+        secondary_user_ids: d.secondary_user_ids,
       }));
 
-      // RBAC: non-admin only sees their own invoices or invoices linked to accessible patients
+      // RBAC: non-admin only sees their own invoices, secondary user invoices, or invoices linked to accessible patients
       if (!isAdmin) {
-        // Fetch accessible patient IDs
         const patientIds = rows.filter((r: any) => r.patient_id).map((r: any) => r.patient_id);
         const uniqueIds = [...new Set(patientIds)];
+        let accessibleIds = new Set<string>();
         if (uniqueIds.length > 0) {
           const { data: patients } = await supabase.from('patients')
             .select('id, clinic_name, doctor_name, lab_name, company_name, user_id, primary_user_id, secondary_user_id')
             .in('id', uniqueIds);
-          const accessibleIds = new Set((patients || []).filter(p => canAccessPatient(p)).map(p => p.id));
-          rows = rows.filter((r: any) => r.user_id === user.id || (r.patient_id && accessibleIds.has(r.patient_id)));
-        } else {
-          rows = rows.filter((r: any) => r.user_id === user.id);
+          accessibleIds = new Set((patients || []).filter(p => canAccessPatient(p)).map(p => p.id));
         }
+        rows = rows.filter((r: any) => {
+          if (r.user_id === user.id) return true;
+          if (r.patient_id && accessibleIds.has(r.patient_id)) return true;
+          // Secondary user visibility (view-only)
+          const secIds = Array.isArray(r.secondary_user_ids) ? r.secondary_user_ids : [];
+          if (secIds.includes(user.id)) return true;
+          return false;
+        });
       }
 
       setInvoices(rows);

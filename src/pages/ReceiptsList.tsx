@@ -41,7 +41,7 @@ export default function ReceiptsList() {
 
       // Get invoice details for each receipt
       const invoiceIds = [...new Set(recs.map(r => r.invoice_id))];
-      const { data: invoices } = await supabase.from('invoices').select('id, invoice_number, patient_name, user_id, patient_id').in('id', invoiceIds);
+      const { data: invoices } = await supabase.from('invoices').select('id, invoice_number, patient_name, user_id, patient_id, secondary_user_ids').in('id', invoiceIds);
       const invoiceMap = new Map((invoices || []).map(i => [i.id, i]));
 
       let rows: ReceiptRow[] = recs.map(r => {
@@ -53,9 +53,14 @@ export default function ReceiptsList() {
         } as ReceiptRow;
       });
 
-      // RBAC: non-admin only sees receipts from their invoices
+      // RBAC: non-admin only sees receipts from their invoices or secondary user invoices
       if (!isAdmin) {
-        const myInvoiceIds = new Set((invoices || []).filter(i => (i as any).user_id === user.id).map(i => i.id));
+        const myInvoiceIds = new Set((invoices || []).filter(i => {
+          if ((i as any).user_id === user.id) return true;
+          const secIds = Array.isArray((i as any).secondary_user_ids) ? (i as any).secondary_user_ids : [];
+          if (secIds.includes(user.id)) return true;
+          return false;
+        }).map(i => i.id));
         rows = rows.filter(r => myInvoiceIds.has(r.invoice_id));
       }
 
