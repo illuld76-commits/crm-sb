@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserScope } from '@/hooks/useUserScope';
+import { resolveCrmContacts } from '@/lib/crm-resolve';
 
 import Header from '@/components/Header';
 import { Button } from '@/components/ui/button';
@@ -221,46 +222,46 @@ export default function Billing() {
     setPatientSearch('');
     setPatientResults([]);
 
-    // Auto-populate primary/secondary user from patient record
-    const { data: patientFull } = await supabase.from('patients').select('primary_user_id, secondary_user_id, clinic_name, doctor_name, lab_name').eq('id', p.id).single();
+    // Fetch full patient record
+    const { data: patientFull } = await supabase.from('patients').select('*').eq('id', p.id).single();
     if (patientFull) {
       if (patientFull.primary_user_id) setPrimaryUserId(patientFull.primary_user_id);
       if (patientFull.secondary_user_id) setSecondaryUserIds([patientFull.secondary_user_id]);
     }
 
-    // Auto-populate client details from clinic/doctor CRM entity
-    const clinicEntity = p.clinic_name ? (await supabase.from('settings_entities').select('*').eq('entity_name', p.clinic_name).eq('entity_type', 'clinic').single()).data : null;
-    const doctorEntity = p.doctor_name ? (await supabase.from('settings_entities').select('*').eq('entity_name', p.doctor_name).eq('entity_type', 'doctor').single()).data : null;
-    const labEntity = patientFull?.lab_name ? (await supabase.from('settings_entities').select('*').eq('entity_name', patientFull.lab_name).eq('entity_type', 'lab').single()).data : null;
+    // Use CRM resolve for auto-population
+    const crm = await resolveCrmContacts({
+      clinic_name: patientFull?.clinic_name || p.clinic_name,
+      doctor_name: patientFull?.doctor_name || p.doctor_name,
+      lab_name: patientFull?.lab_name || (p as any).lab_name,
+      company_name: patientFull?.company_name || (p as any).company_name,
+    });
 
-    // Build client details from clinic/doctor entity
-    const clientEntity = clinicEntity || doctorEntity;
-    const clientAddr = clientEntity
-      ? [clientEntity.address, clientEntity.city, clientEntity.state, clientEntity.country].filter(Boolean).join(', ')
+    // Client details from CRM
+    const clientAddr = crm.client
+      ? crm.client.address
       : [p.clinic_name, p.doctor_name].filter(Boolean).join(' • ');
-
     setClientDetails({
       name: p.patient_name,
-      email: (clientEntity as any)?.email || '',
+      email: crm.client?.email || patientFull?.contact_email || '',
       address: clientAddr,
     });
 
-    // Auto-fill GST from client entity
-    if ((clientEntity as any)?.gst_number) {
-      setGstNumber((clientEntity as any).gst_number);
-    }
-    if ((clientEntity as any)?.state) {
-      setPlaceOfSupply((clientEntity as any).state);
+    if (crm.client?.gstNumber) setGstNumber(crm.client.gstNumber);
+    if (crm.client?.state) setPlaceOfSupply(crm.client.state);
+
+    // Resolve primary user from CRM if not set on patient
+    if (!patientFull?.primary_user_id && crm.primaryUserId) {
+      setPrimaryUserId(crm.primaryUserId);
     }
 
-    // Auto-populate merchant details from lab entity (the lab doing the work)
-    if (labEntity) {
-      const labAddr = [labEntity.address, labEntity.city, labEntity.state, labEntity.country].filter(Boolean).join(', ');
+    // Merchant details from lab
+    if (crm.merchant) {
       setMerchantDetails(prev => ({
         ...prev,
-        name: (labEntity as any).entity_name || prev.name,
-        email: (labEntity as any).email || prev.email,
-        address: labAddr || prev.address,
+        name: crm.merchant!.name || prev.name,
+        email: crm.merchant!.email || prev.email,
+        address: crm.merchant!.address || prev.address,
       }));
     }
 
@@ -272,39 +273,58 @@ export default function Billing() {
       const { data: plansData } = await supabase.from('treatment_plans').select('id, plan_name, phase_id, case_request_id').in('phase_id', phasesData.map(d => d.id));
       setPatientPlans((plansData || []) as any);
 
-      // Auto-populate line items from linked case request's request type
+      // Auto-populate line items from linked case request's request_items
       if (isNew) {
-        // Try from plan's case_request_id first, then from patient's case_requests
-        let caseReqType: string | null = null;
         let caseReqId: string | null = null;
+        let requestItems: any[] = [];
+
+        // Try from plan's case_request_id first
         if (plansData && plansData.length > 0) {
           const planWithRequest = plansData.find((pl: any) => pl.case_request_id);
           if (planWithRequest) {
             caseReqId = (planWithRequest as any).case_request_id;
-            const { data: caseReq } = await supabase.from('case_requests').select('request_type').eq('id', caseReqId!).single();
-            if (caseReq) caseReqType = caseReq.request_type;
+            const { data: caseReq } = await supabase.from('case_requests').select('request_type, request_items').eq('id', caseReqId!).single();
+            if (caseReq) requestItems = (caseReq as any).request_items || [];
           }
         }
         // Fallback: look up case_requests by patient_id
-        if (!caseReqType) {
-          const { data: patientCases } = await supabase.from('case_requests').select('id, request_type').eq('patient_id', p.id).eq('is_deleted', false).limit(1);
+        if (requestItems.length === 0) {
+          const { data: patientCases } = await supabase.from('case_requests').select('id, request_type, request_items').eq('patient_id', p.id).eq('is_deleted', false).order('created_at', { ascending: false }).limit(1);
           if (patientCases && patientCases.length > 0) {
-            caseReqType = patientCases[0].request_type;
             caseReqId = patientCases[0].id;
+            requestItems = (patientCases[0] as any).request_items || [];
           }
         }
-        if (caseReqType) {
-          const reqTypePreset = allPresets.find(pr => pr.category === 'request_type' && pr.name === caseReqType);
-          if (reqTypePreset) {
-            setItems([{
-              description: reqTypePreset.name,
+
+        if (caseReqId) setCaseRequestId(caseReqId);
+
+        // Build line items from request_items (with qty/rate from snapshot) or fallback to preset match
+        if (requestItems.length > 0) {
+          const lineItems: LineItem[] = requestItems.map((item: any) => {
+            const preset = allPresets.find(pr => pr.category === 'request_type' && pr.name === item.request_type);
+            return {
+              description: item.request_type || 'Service',
               hsn: '9993',
-              qty: 1,
-              rate: reqTypePreset.unit_price || reqTypePreset.fee_usd || 0,
+              qty: item.qty || 1,
+              rate: item.rate || preset?.unit_price || preset?.fee_usd || 0,
               disc_pct: 0,
-              gst_pct: reqTypePreset.tax_rate || 18,
-            }]);
-            if (caseReqId) setCaseRequestId(caseReqId);
+              gst_pct: preset?.tax_rate || 18,
+            };
+          });
+          setItems(lineItems);
+        } else if (caseReqId) {
+          // Single request_type fallback
+          const { data: cr } = await supabase.from('case_requests').select('request_type').eq('id', caseReqId).single();
+          if (cr?.request_type) {
+            const preset = allPresets.find(pr => pr.category === 'request_type' && pr.name === cr.request_type);
+            if (preset) {
+              setItems([{
+                description: preset.name,
+                hsn: '9993', qty: 1,
+                rate: preset.unit_price || preset.fee_usd || 0,
+                disc_pct: 0, gst_pct: preset.tax_rate || 18,
+              }]);
+            }
           }
         }
       }
@@ -696,17 +716,38 @@ export default function Billing() {
                   const disc = lineAmt * (item.disc_pct / 100);
                   const amt = lineAmt - disc;
                   return (
-                    <div key={i} className="grid grid-cols-12 gap-2 items-center">
-                      <div className="col-span-12 sm:col-span-4">
-                        <Input className="h-8 text-xs" placeholder="Description" value={item.description} onChange={e => updateItem(i, 'description', e.target.value)} disabled={!isEditable} />
+                    <div key={i}>
+                      {/* Desktop layout */}
+                      <div className="hidden sm:grid grid-cols-12 gap-2 items-center">
+                        <div className="col-span-4">
+                          <Input className="h-8 text-xs" placeholder="Description" value={item.description} onChange={e => updateItem(i, 'description', e.target.value)} disabled={!isEditable} />
+                        </div>
+                        <Input className="h-8 text-xs" value={item.hsn} onChange={e => updateItem(i, 'hsn', e.target.value)} disabled={!isEditable} />
+                        <Input className="h-8 text-xs" type="number" value={item.qty} onChange={e => updateItem(i, 'qty', parseFloat(e.target.value) || 0)} disabled={!isEditable} />
+                        <Input className="h-8 text-xs" type="number" value={item.rate} onChange={e => updateItem(i, 'rate', parseFloat(e.target.value) || 0)} disabled={!isEditable} />
+                        <Input className="h-8 text-xs" type="number" value={item.disc_pct} onChange={e => updateItem(i, 'disc_pct', parseFloat(e.target.value) || 0)} disabled={!isEditable} />
+                        <Input className="h-8 text-xs" type="number" value={item.gst_pct} onChange={e => updateItem(i, 'gst_pct', parseFloat(e.target.value) || 0)} disabled={!isEditable} />
+                        <div className="col-span-2 text-right text-sm font-medium">{currencySymbol}{amt.toFixed(2)}</div>
+                        {isEditable && <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeItem(i)}><Trash2 className="w-3 h-3 text-destructive" /></Button>}
                       </div>
-                      <Input className="h-8 text-xs hidden sm:block" value={item.hsn} onChange={e => updateItem(i, 'hsn', e.target.value)} disabled={!isEditable} />
-                      <Input className="h-8 text-xs" type="number" value={item.qty} onChange={e => updateItem(i, 'qty', parseFloat(e.target.value) || 0)} disabled={!isEditable} />
-                      <Input className="h-8 text-xs" type="number" value={item.rate} onChange={e => updateItem(i, 'rate', parseFloat(e.target.value) || 0)} disabled={!isEditable} />
-                      <Input className="h-8 text-xs hidden sm:block" type="number" value={item.disc_pct} onChange={e => updateItem(i, 'disc_pct', parseFloat(e.target.value) || 0)} disabled={!isEditable} />
-                      <Input className="h-8 text-xs hidden sm:block" type="number" value={item.gst_pct} onChange={e => updateItem(i, 'gst_pct', parseFloat(e.target.value) || 0)} disabled={!isEditable} />
-                      <div className="col-span-2 text-right text-sm font-medium">{currencySymbol}{amt.toFixed(2)}</div>
-                      {isEditable && <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeItem(i)}><Trash2 className="w-3 h-3 text-destructive" /></Button>}
+                      {/* Mobile card layout */}
+                      <div className="sm:hidden border rounded-lg p-3 space-y-2">
+                        <Input className="h-8 text-xs" placeholder="Description" value={item.description} onChange={e => updateItem(i, 'description', e.target.value)} disabled={!isEditable} />
+                        <div className="grid grid-cols-3 gap-2">
+                          <div><Label className="text-[10px] text-muted-foreground">Qty</Label><Input className="h-8 text-xs" type="number" value={item.qty} onChange={e => updateItem(i, 'qty', parseFloat(e.target.value) || 0)} disabled={!isEditable} /></div>
+                          <div><Label className="text-[10px] text-muted-foreground">Rate</Label><Input className="h-8 text-xs" type="number" value={item.rate} onChange={e => updateItem(i, 'rate', parseFloat(e.target.value) || 0)} disabled={!isEditable} /></div>
+                          <div><Label className="text-[10px] text-muted-foreground">Amount</Label><div className="h-8 flex items-center text-sm font-medium">{currencySymbol}{amt.toFixed(2)}</div></div>
+                        </div>
+                        <details className="text-xs">
+                          <summary className="cursor-pointer text-muted-foreground">HSN, Disc%, GST%</summary>
+                          <div className="grid grid-cols-3 gap-2 mt-1">
+                            <div><Label className="text-[10px] text-muted-foreground">HSN</Label><Input className="h-8 text-xs" value={item.hsn} onChange={e => updateItem(i, 'hsn', e.target.value)} disabled={!isEditable} /></div>
+                            <div><Label className="text-[10px] text-muted-foreground">Disc%</Label><Input className="h-8 text-xs" type="number" value={item.disc_pct} onChange={e => updateItem(i, 'disc_pct', parseFloat(e.target.value) || 0)} disabled={!isEditable} /></div>
+                            <div><Label className="text-[10px] text-muted-foreground">GST%</Label><Input className="h-8 text-xs" type="number" value={item.gst_pct} onChange={e => updateItem(i, 'gst_pct', parseFloat(e.target.value) || 0)} disabled={!isEditable} /></div>
+                          </div>
+                        </details>
+                        {isEditable && <Button variant="ghost" size="sm" className="text-xs text-destructive" onClick={() => removeItem(i)}><Trash2 className="w-3 h-3 mr-1" /> Remove</Button>}
+                      </div>
                     </div>
                   );
                 })}

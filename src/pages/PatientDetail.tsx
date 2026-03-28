@@ -202,8 +202,58 @@ export default function PatientDetail() {
   useEffect(() => {
     if (!isNew && id) loadPatient(id);
     fetchSettingsEntities();
-    fetchAllProfiles(); // Fetch for all users (needed for task assignees)
+    fetchAllProfiles();
   }, [id]);
+
+  // Realtime subscriptions for live updates
+  useEffect(() => {
+    if (!id || isNew) return;
+    const channels: any[] = [];
+
+    // Assets realtime
+    const assetChannel = supabase.channel(`assets-${id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'assets', filter: `case_id=eq.${id}` },
+        (payload) => { setAssets(prev => [payload.new as AssetRow, ...prev.filter(a => a.id !== (payload.new as any).id)]); })
+      .subscribe();
+    channels.push(assetChannel);
+
+    // Communications realtime (triggers CommunicationHub refresh)
+    const commChannel = supabase.channel(`comms-${id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'communications', filter: `case_id=eq.${id}` },
+        () => { /* CommunicationHub has its own subscription; this refreshes timeline */ })
+      .subscribe();
+    channels.push(commChannel);
+
+    // Invoices realtime
+    const invChannel = supabase.channel(`invoices-${id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'invoices', filter: `patient_id=eq.${id}` },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const inv = payload.new as any;
+            setInvoices(prev => [{ id: inv.id, amount_usd: inv.amount_usd, status: inv.status, created_at: inv.created_at, patient_name: inv.patient_name, display_id: inv.display_id, type: inv.type }, ...prev]);
+          } else if (payload.eventType === 'UPDATE') {
+            const inv = payload.new as any;
+            setInvoices(prev => prev.map(i => i.id === inv.id ? { ...i, amount_usd: inv.amount_usd, status: inv.status } : i));
+          }
+        })
+      .subscribe();
+    channels.push(invChannel);
+
+    // Plan sections realtime
+    const secChannel = supabase.channel(`sections-${id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'plan_sections' },
+        (payload) => {
+          const sec = payload.new as PlanSection;
+          setSections(prev => {
+            if (prev.some(s => s.id === sec.id)) return prev;
+            return [...prev, sec];
+          });
+        })
+      .subscribe();
+    channels.push(secChannel);
+
+    return () => { channels.forEach(ch => supabase.removeChannel(ch)); };
+  }, [id, isNew]);
 
   const fetchSettingsEntities = async () => {
     const { data } = await supabase.from('settings_entities').select('*').eq('is_deleted', false).order('entity_name');
