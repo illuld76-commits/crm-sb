@@ -97,17 +97,20 @@ export default function CaseSubmission() {
     }
   }, [id]);
 
-  // Patient search (RBAC-scoped)
+  // Patient search (RBAC-scoped) — show dropdown on focus, filter as user types
   useEffect(() => {
-    if (patientSearch.length < 2) { setPatientResults([]); return; }
+    if (!patientSearchFocused) { setPatientResults([]); return; }
     const t = setTimeout(async () => {
-      const { data } = await supabase.from('patients').select('id, patient_name, doctor_name, clinic_name, lab_name, company_name, user_id, primary_user_id, secondary_user_id')
-        .ilike('patient_name', `%${patientSearch}%`).limit(20);
+      let query = supabase.from('patients').select('id, patient_name, doctor_name, clinic_name, lab_name, company_name, user_id, primary_user_id, secondary_user_id');
+      if (patientSearch.length >= 1) {
+        query = query.ilike('patient_name', `%${patientSearch}%`);
+      }
+      const { data } = await query.limit(20);
       const results = (data || []).filter(p => canAccessPatient(p));
-      setPatientResults(results.slice(0, 5));
-    }, 300);
+      setPatientResults(results.slice(0, 10));
+    }, 200);
     return () => clearTimeout(t);
-  }, [patientSearch, canAccessPatient]);
+  }, [patientSearch, patientSearchFocused, canAccessPatient]);
 
   const selectExistingPatient = async (p: typeof patientResults[0]) => {
     setSelectedPatientId(p.id);
@@ -543,7 +546,7 @@ export default function CaseSubmission() {
                   onFocus={() => setPatientSearchFocused(true)}
                   onBlur={() => setTimeout(() => setPatientSearchFocused(false), 200)}
                 />
-                {patientSearchFocused && patientSearch.length >= 2 && (
+                {patientSearchFocused && patientResults.length >= 0 && (
                   <div className="absolute z-10 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
                     {patientResults.length > 0 ? patientResults.map(p => (
                       <div key={p.id} className="px-3 py-2 text-sm hover:bg-accent cursor-pointer" onClick={() => selectExistingPatient(p)}>
@@ -598,14 +601,11 @@ export default function CaseSubmission() {
                   <SelectTrigger><SelectValue placeholder="Select type..." /></SelectTrigger>
                   <SelectContent>
                     {presets.filter(p => p.category === 'request_type').map(p => (
-                      <SelectItem key={p.id} value={p.name}>{p.name}{p.fee_usd ? ` ($${p.fee_usd})` : ''}</SelectItem>
+                      <SelectItem key={`rt-${p.id}`} value={p.name}>{p.name}{p.fee_usd ? ` (${p.fee_usd})` : ''}</SelectItem>
                     ))}
                     {presets.filter(p => p.category === 'work_order').map(p => (
-                      <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
+                      <SelectItem key={`wo-${p.id}`} value={p.name}>{p.name}</SelectItem>
                     ))}
-                    <SelectItem value="Aligner Treatment">Aligner Treatment</SelectItem>
-                    <SelectItem value="Retainer">Retainer</SelectItem>
-                    <SelectItem value="Refinement">Refinement</SelectItem>
                     <SelectItem value="Other">Other</SelectItem>
                   </SelectContent>
                 </Select>
@@ -631,7 +631,7 @@ export default function CaseSubmission() {
                   <SelectTrigger><SelectValue placeholder="Select doctor..." /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">None</SelectItem>
-                    {doctorEntities.map(e => <SelectItem key={e.entity_name} value={e.entity_name}>{e.entity_name}</SelectItem>)}
+                    {doctorEntities.map(e => <SelectItem key={`doctor-${e.entity_name}`} value={e.entity_name}>{e.entity_name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -641,7 +641,7 @@ export default function CaseSubmission() {
                   <SelectTrigger><SelectValue placeholder="Select clinic..." /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">None</SelectItem>
-                    {clinicEntities.map(e => <SelectItem key={e.entity_name} value={e.entity_name}>{e.entity_name}</SelectItem>)}
+                    {clinicEntities.map(e => <SelectItem key={`clinic-${e.entity_name}`} value={e.entity_name}>{e.entity_name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -651,7 +651,7 @@ export default function CaseSubmission() {
                   <SelectTrigger><SelectValue placeholder="Select lab..." /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">None</SelectItem>
-                    {labEntities.map(e => <SelectItem key={e.entity_name} value={e.entity_name}>{e.entity_name}</SelectItem>)}
+                    {labEntities.map(e => <SelectItem key={`lab-${e.entity_name}`} value={e.entity_name}>{e.entity_name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -720,17 +720,36 @@ export default function CaseSubmission() {
               <Textarea value={formData.notes} onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))} rows={4} placeholder="Treatment notes, special instructions..." />
             </div>
 
-            {/* Dynamic Work Order Form Fields */}
+            {/* Dynamic Work Order Form Fields — multi-item tabs */}
             {(() => {
-              const reqType = presets.find(p => p.category === 'request_type' && p.name === formData.request_type);
-              const linkedWoId = reqType?.unit;
-              const wo = linkedWoId ? presets.find(p => p.id === linkedWoId) : presets.find(p => p.category === 'work_order' && p.name === formData.request_type);
-              if (!wo?.fields || (wo.fields as any[]).length === 0) return null;
-              return (
-                <Card className="border-primary/20 bg-primary/5">
-                  <CardContent className="p-4 space-y-3">
-                    <h4 className="text-sm font-semibold">📋 {wo.name} — Work Order Form</h4>
-                    {(wo.fields as any[]).map((field: any) => {
+              // Collect all work order forms from selectedRequestTypes + formData.request_type
+              const woForms: { name: string; wo: Preset; idx: number }[] = [];
+              
+              // From selected request items
+              selectedRequestTypes.forEach((rt, idx) => {
+                const reqType = presets.find(p => p.category === 'request_type' && p.name === rt.name);
+                const linkedWoId = reqType?.unit;
+                const wo = linkedWoId ? presets.find(p => p.id === linkedWoId) : presets.find(p => p.category === 'work_order' && p.name === rt.name);
+                if (wo?.fields && (wo.fields as any[]).length > 0) {
+                  woForms.push({ name: rt.name, wo, idx });
+                }
+              });
+
+              // Fallback: if no items but request_type is set
+              if (woForms.length === 0 && formData.request_type) {
+                const reqType = presets.find(p => p.category === 'request_type' && p.name === formData.request_type);
+                const linkedWoId = reqType?.unit;
+                const wo = linkedWoId ? presets.find(p => p.id === linkedWoId) : presets.find(p => p.category === 'work_order' && p.name === formData.request_type);
+                if (wo?.fields && (wo.fields as any[]).length > 0) {
+                  woForms.push({ name: formData.request_type, wo, idx: -1 });
+                }
+              }
+
+              if (woForms.length === 0) return null;
+
+              const renderWoFields = (wo: Preset, dataKey: string) => (
+                <div className="space-y-3">
+                  {(wo.fields as any[]).map((field: any) => {
                       if (field.type === 'tooth_chart') {
                         return (
                           <div key={field.id} className="space-y-1">
@@ -796,6 +815,39 @@ export default function CaseSubmission() {
                         </div>
                       );
                     })}
+                </div>
+              );
+
+              if (woForms.length === 1) {
+                const { wo, idx } = woForms[0];
+                const dataKey = idx >= 0 ? `item_${idx}` : 'main';
+                return (
+                  <Card className="border-primary/20 bg-primary/5">
+                    <CardContent className="p-4 space-y-3">
+                      <h4 className="text-sm font-semibold">📋 {wo.name} — Work Order Form</h4>
+                      {renderWoFields(wo, dataKey)}
+                    </CardContent>
+                  </Card>
+                );
+              }
+
+              // Multiple work order forms in tabs
+              return (
+                <Card className="border-primary/20 bg-primary/5">
+                  <CardContent className="p-4 space-y-3">
+                    <Tabs defaultValue={`wo-0`}>
+                      <TabsList className="w-full flex-wrap h-auto">
+                        {woForms.map((wf, i) => (
+                          <TabsTrigger key={i} value={`wo-${i}`} className="text-xs">{wf.name}</TabsTrigger>
+                        ))}
+                      </TabsList>
+                      {woForms.map((wf, i) => (
+                        <TabsContent key={i} value={`wo-${i}`}>
+                          <h4 className="text-sm font-semibold mb-2">📋 {wf.wo.name}</h4>
+                          {renderWoFields(wf.wo, `item_${wf.idx}`)}
+                        </TabsContent>
+                      ))}
+                    </Tabs>
                   </CardContent>
                 </Card>
               );
