@@ -1,82 +1,86 @@
 
 
-# Integrated Fix: Responsiveness, Billing-CRM Linkage, Secondary User Visibility & Cross-Module Consistency
+# Fix Case Request Flow, Entity Duplicates, and Conversion Pipeline
 
-## Issues Identified
+## Issues Found
 
-### 1. Slow data/media updates (responsiveness)
-- `PatientDetail.tsx` loads everything in one giant `loadPatient()` call with no realtime subscription. After uploading media via `CommunicationHub`, the assets/sections only show when the user re-enters the patient view.
-- No realtime subscriptions on `assets`, `invoices`, `plan_sections`, or `communications` in PatientDetail.
+### 1. Patient search has no dropdown — only live search
+The patient search input only shows results after typing 2+ characters. There is no initial dropdown of all patients. User expects a proper dropdown with live-search filtering.
 
-### 2. Billing not linked to phase/plan from case request type
-- `Billing.tsx` line 276-310: Auto-population from `case_requests.request_items` only works when creating a new invoice AND the patient already has plans with `case_request_id` set. The logic falls through silently if presets don't match by name exactly.
-- Client email not auto-populated because `clientDetails.email` is set from `settings_entities` lookup, but the entity match fails if `clinic_name` is empty or doesn't match exactly.
+**Fix**: Show all RBAC-scoped patients when the search input is focused (even with empty text), with live filtering as user types.
 
-### 3. Secondary user (view-only) visibility missing
-- Invoice RBAC in `BillingList.tsx` only checks `user_id` or `canAccessPatient` — doesn't check `secondary_user_ids` stored on the invoice. Secondary users assigned to view billing can't see their invoices.
-- `ReceiptsList.tsx` similarly only checks `user_id` on invoices, not secondary assignments.
+### 2. Doctor/Clinic/Lab dropdowns showing same names
+The `settings_entities` table stores entities with `entity_type` discriminator. The `filterEntities` function correctly filters by type. However, if the same `entity_name` was added under multiple `entity_type` values (e.g., "ABC" as both clinic and doctor), they appear identically. The real issue is likely that no entities exist with different types, so the admin fallback at lines 299-307 shows all entities of each type — but the entity_type filter IS being applied. The actual bug: the `key` prop on SelectItem uses `e.entity_name` which could collide across types.
 
-### 4. CRM "Company First" not fully integrated into billing
-- When a project is assigned to a company/clinic/lab, the primary contact from `settings_entities` should auto-fill — partially done but email often empty because the entity lookup in `selectPatient()` uses `clinic_name` from search results which may be null.
-- No auto-lookup of company's primary contact user from `user_assignments`.
+**Fix**: Verify the filter logic is correct and add `entity_type` prefix to keys to prevent collision. Also check the actual data in the database.
+
+### 3. Request Type and Request Items are redundant/confusing
+Currently there are TWO places to specify request types:
+- The "Request Type" single-select dropdown (line 583) — picks ONE type and loads its work order form
+- The "Request Items" section (line 660) — lets you add multiple items with qty/rate
+
+These serve different purposes but the user sees duplication. The intended flow is: Request Items is the billable line items list; Request Type is the primary work order type that loads dynamic form fields.
+
+**Fix**: 
+- Make "Request Type" the primary selector that ALSO auto-adds to Request Items when selected
+- When a request type is selected, auto-add it to `selectedRequestTypes` if not already there
+- Remove hardcoded items ("Aligner Treatment", "Retainer", "Refinement") from the Request Type dropdown since they should come from presets
+- When multiple request items are added, show their work order forms in side-by-side tabs
+
+### 4. Accepting a case from SubmittedCases list does NOT convert to project
+In `SubmittedCases.tsx` line 92-100, `updateStatus` just does a bare status update — it does NOT call `convertCaseToProject`. The conversion only happens:
+- From CaseSubmission detail view `updateStatus` (line 233-242)
+- From SubmittedCases `convertToCase` button (line 112-126) — but this only shows for accepted cases that don't have a patient_id yet
+
+**Root cause**: Accepting from the list view only changes the status text — no project/phase/plan is created. The "Convert to Case" button appears afterward but requires a second click.
+
+**Fix**: In `SubmittedCases.tsx`, when status changes to 'accepted', also call `convertCaseToProject` to create the project/phase/plan/invoice in one step, same as the detail view does.
+
+### 5. Work order form tabs for multiple request items
+Currently only one work order form shows based on `formData.request_type`. When multiple request items are added, their respective work order forms should appear in tabs.
+
+**Fix**: Render a tab per request item that has a linked work order preset, showing each form side by side.
 
 ## Implementation Plan
 
-### Step 1: Add realtime subscriptions to PatientDetail
-- Subscribe to `assets`, `communications`, `invoices`, and `plan_sections` tables filtered by `case_id`/`patient_id`
-- On INSERT/UPDATE events, merge new records into state without full reload
-- Add cleanup on unmount
+### Step 1: Fix patient search to show dropdown on focus
+- `CaseSubmission.tsx`: When input is focused and search is empty, fetch first 10 patients (RBAC-scoped)
+- Show the dropdown immediately on focus with all results
+- Filter as user types
 
-### Step 2: Fix billing auto-population from case request
-- In `Billing.tsx` `selectPatient()`, after fetching phases/plans, also fetch `case_requests` directly by `patient_id` to get `request_items`
-- Use `request_items` (jsonb array) to populate line items with qty and rate from the stored snapshot
-- Populate `caseRequestId` so the invoice links back
-- Fix entity email lookup: query all entity types (clinic, doctor, lab, company) from the patient record and use the first one with a valid email
-- Auto-resolve `primaryUserId` by looking up `user_assignments` where `assignment_value` matches the entity name
+### Step 2: Fix entity dropdowns — remove hardcoded items from Request Type
+- Remove hardcoded "Aligner Treatment", "Retainer", "Refinement", "Other" from the Request Type dropdown
+- Only show `request_type` category presets
+- Keep only `request_type` presets in Request Items selector too
 
-### Step 3: Secondary user visibility in billing
-- `BillingList.tsx`: Add check for `secondary_user_ids` — if the current user's ID is in the invoice's `secondary_user_ids` array, show it (view-only)
-- `ReceiptsList.tsx`: Same — check `secondary_user_ids` on linked invoices
-- `ExpensesList.tsx`: Check if expense's `patient_id` links to an accessible patient OR if the user appears in related invoice's `secondary_user_ids`
-- Mark secondary-user invoices as read-only in `Billing.tsx`
+### Step 3: Auto-sync Request Type with Request Items
+- When user selects a Request Type, auto-add it to `selectedRequestTypes` if not already present
+- `formData.request_type` becomes the first item's name for backward compatibility
 
-### Step 4: Company-first contact resolution
-- Create a shared utility `src/lib/crm-resolve.ts` that:
-  - Takes a patient record (with clinic/lab/company/doctor names)
-  - Queries `settings_entities` for all matching entities
-  - Returns the primary contact info (name, email, address, GST, state)
-  - Resolves the primary user by matching `user_assignments` where `assignment_type` matches entity type and `assignment_value` matches entity name
-- Use this utility in:
-  - `Billing.tsx` `selectPatient()`
-  - `case-conversion.ts` when creating draft invoices
-  - `PatientDetail.tsx` for display purposes
+### Step 4: Fix SubmittedCases accept → auto-convert
+- In `SubmittedCases.tsx`, change the 'accepted' status action to call `convertCaseToProject` (same as CaseSubmission detail view)
+- Remove the separate "Convert to Case" button since acceptance now handles it
 
-### Step 5: Ensure invoice shows phase/plan suggestions
-- In `Billing.tsx`, when patient is selected, fetch treatment plans and show them as selectable badges that auto-add their associated preset line items
-- Show case request type context in the invoice form as informational chips
+### Step 5: Multi-item work order form tabs
+- Instead of rendering one work order form based on `formData.request_type`, iterate through `selectedRequestTypes`
+- For each item with a linked work order preset, render its form in a tab
+- Store dynamic data keyed by request item index
 
-### Step 6: Mobile responsiveness for invoice line items
-- On mobile (`< sm`), render line items as stacked cards instead of grid columns
-- Show description, qty, rate, amount; collapse HSN/disc/GST behind an expand toggle
+### Step 6: Billing patient search dropdown
+- Same fix as CaseSubmission: show all patients on focus, filter as user types
 
-### Step 7: Cross-module verification
-- Verify `create-user` edge function deploys without error (code looks correct now)
-- Ensure `CommunicationHub` realtime channel properly receives new messages with attachments
-- Verify `case-conversion.ts` idempotency (`converted_at` check) prevents duplicate assets
+## Files to Modify
 
-## Files to Create/Modify
+| File | Changes |
+|------|---------|
+| `src/pages/CaseSubmission.tsx` | Patient dropdown on focus, remove hardcoded request types, auto-sync request type ↔ request items, multi-item work order tabs |
+| `src/pages/SubmittedCases.tsx` | Accept action calls `convertCaseToProject` directly |
+| `src/pages/Billing.tsx` | Patient dropdown on focus |
 
-| File | Action |
-|------|--------|
-| `src/lib/crm-resolve.ts` | New — shared CRM contact resolution utility |
-| `src/pages/PatientDetail.tsx` | Add realtime subscriptions for assets/invoices/sections |
-| `src/pages/Billing.tsx` | Fix auto-population, add secondary user visibility, mobile layout |
-| `src/pages/BillingList.tsx` | Add secondary_user_ids check for RBAC |
-| `src/pages/ReceiptsList.tsx` | Add secondary_user_ids check for RBAC |
-| `src/pages/ExpensesList.tsx` | Add patient/invoice-based RBAC check |
-| `src/lib/case-conversion.ts` | Use crm-resolve for invoice creation |
-| `src/components/CommunicationHub.tsx` | Verify realtime channel works (minor fix if needed) |
+## Technical Details
 
-## Database Changes
-None required — all needed columns exist (`secondary_user_ids` on invoices, `request_items` on case_requests, etc.)
+- Patient search: Change `if (patientSearch.length < 2)` to `if (!patientSearchFocused)` and fetch on focus with empty search loading first 10
+- Request Items sync: `useEffect` watches `formData.request_type` changes and auto-adds to `selectedRequestTypes`
+- SubmittedCases accept: Replace `updateStatus(c.id, 'accepted')` with a function that calls `convertCaseToProject(c, presets, user.id)` then updates local state
+- Work order tabs: Map over `selectedRequestTypes`, find linked work order preset for each, render in `<Tabs>`
 
