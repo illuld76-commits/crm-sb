@@ -90,6 +90,21 @@ export default function SubmittedCases() {
   }, [cases, search, sortBy, filterStatus]);
 
   const updateStatus = async (id: string, newStatus: CaseRequest['status']) => {
+    // If accepting, auto-convert to project
+    if (newStatus === 'accepted' && user) {
+      const caseReq = cases.find(c => c.id === id);
+      if (caseReq && !caseReq.patient_id) {
+        const result = await convertCaseToProject(caseReq, presets, user.id);
+        if (result) {
+          setCases(prev => prev.map(c => c.id === id ? { ...c, status: 'accepted', patient_id: result.patientId } : c));
+          toast.success('Case accepted — project, phase, plan & draft invoice created');
+          return;
+        } else {
+          toast.error('Failed to convert case to project');
+          return;
+        }
+      }
+    }
     const { error } = await supabase.from('case_requests').update({ status: newStatus }).eq('id', id);
     if (!error) {
       setCases(prev => prev.map(c => c.id === id ? { ...c, status: newStatus } : c));
