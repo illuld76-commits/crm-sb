@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserScope } from '@/hooks/useUserScope';
+import { resolveCrmContacts } from '@/lib/crm-resolve';
 
 import Header from '@/components/Header';
 import { Button } from '@/components/ui/button';
@@ -221,46 +222,46 @@ export default function Billing() {
     setPatientSearch('');
     setPatientResults([]);
 
-    // Auto-populate primary/secondary user from patient record
-    const { data: patientFull } = await supabase.from('patients').select('primary_user_id, secondary_user_id, clinic_name, doctor_name, lab_name').eq('id', p.id).single();
+    // Fetch full patient record
+    const { data: patientFull } = await supabase.from('patients').select('*').eq('id', p.id).single();
     if (patientFull) {
       if (patientFull.primary_user_id) setPrimaryUserId(patientFull.primary_user_id);
       if (patientFull.secondary_user_id) setSecondaryUserIds([patientFull.secondary_user_id]);
     }
 
-    // Auto-populate client details from clinic/doctor CRM entity
-    const clinicEntity = p.clinic_name ? (await supabase.from('settings_entities').select('*').eq('entity_name', p.clinic_name).eq('entity_type', 'clinic').single()).data : null;
-    const doctorEntity = p.doctor_name ? (await supabase.from('settings_entities').select('*').eq('entity_name', p.doctor_name).eq('entity_type', 'doctor').single()).data : null;
-    const labEntity = patientFull?.lab_name ? (await supabase.from('settings_entities').select('*').eq('entity_name', patientFull.lab_name).eq('entity_type', 'lab').single()).data : null;
+    // Use CRM resolve for auto-population
+    const crm = await resolveCrmContacts({
+      clinic_name: patientFull?.clinic_name || p.clinic_name,
+      doctor_name: patientFull?.doctor_name || p.doctor_name,
+      lab_name: patientFull?.lab_name || (p as any).lab_name,
+      company_name: patientFull?.company_name || (p as any).company_name,
+    });
 
-    // Build client details from clinic/doctor entity
-    const clientEntity = clinicEntity || doctorEntity;
-    const clientAddr = clientEntity
-      ? [clientEntity.address, clientEntity.city, clientEntity.state, clientEntity.country].filter(Boolean).join(', ')
+    // Client details from CRM
+    const clientAddr = crm.client
+      ? crm.client.address
       : [p.clinic_name, p.doctor_name].filter(Boolean).join(' • ');
-
     setClientDetails({
       name: p.patient_name,
-      email: (clientEntity as any)?.email || '',
+      email: crm.client?.email || patientFull?.contact_email || '',
       address: clientAddr,
     });
 
-    // Auto-fill GST from client entity
-    if ((clientEntity as any)?.gst_number) {
-      setGstNumber((clientEntity as any).gst_number);
-    }
-    if ((clientEntity as any)?.state) {
-      setPlaceOfSupply((clientEntity as any).state);
+    if (crm.client?.gstNumber) setGstNumber(crm.client.gstNumber);
+    if (crm.client?.state) setPlaceOfSupply(crm.client.state);
+
+    // Resolve primary user from CRM if not set on patient
+    if (!patientFull?.primary_user_id && crm.primaryUserId) {
+      setPrimaryUserId(crm.primaryUserId);
     }
 
-    // Auto-populate merchant details from lab entity (the lab doing the work)
-    if (labEntity) {
-      const labAddr = [labEntity.address, labEntity.city, labEntity.state, labEntity.country].filter(Boolean).join(', ');
+    // Merchant details from lab
+    if (crm.merchant) {
       setMerchantDetails(prev => ({
         ...prev,
-        name: (labEntity as any).entity_name || prev.name,
-        email: (labEntity as any).email || prev.email,
-        address: labAddr || prev.address,
+        name: crm.merchant!.name || prev.name,
+        email: crm.merchant!.email || prev.email,
+        address: crm.merchant!.address || prev.address,
       }));
     }
 
