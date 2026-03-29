@@ -30,7 +30,6 @@ import { formatDistanceToNow } from 'date-fns';
 import SnaponLogo from '@/components/SnaponLogo';
 import { getCompanyPeers } from '@/lib/company-scope';
 import { logAction } from '@/lib/audit';
-import { getCompanyPeers } from '@/lib/company-scope';
 import IPRQuadrantDiagram from '@/components/IPRQuadrantDiagram';
 import ToothMovementChart from '@/components/ToothMovementChart';
 import CommunicationHub from '@/components/CommunicationHub';
