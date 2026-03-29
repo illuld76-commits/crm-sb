@@ -90,10 +90,10 @@ export default function SubmittedCases() {
   }, [cases, search, sortBy, filterStatus]);
 
   const updateStatus = async (id: string, newStatus: CaseRequest['status']) => {
-    // If accepting, auto-convert to project
+    // If accepting, auto-convert to project (even if patient_id already exists — creates new phase)
     if (newStatus === 'accepted' && user) {
       const caseReq = cases.find(c => c.id === id);
-      if (caseReq && !caseReq.patient_id) {
+      if (caseReq) {
         const result = await convertCaseToProject(caseReq, presets, user.id);
         if (result) {
           setCases(prev => prev.map(c => c.id === id ? { ...c, status: 'accepted', patient_id: result.patientId } : c));

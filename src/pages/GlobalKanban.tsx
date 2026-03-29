@@ -105,8 +105,16 @@ export default function GlobalKanban() {
       const cleanPlans = scopedPlans.map(({ _patient, ...rest }: any) => rest) as EnrichedPlan[];
       setPlans(cleanPlans);
 
-      // RBAC: filter case requests for non-admin
-      const scopedCases = isAdmin ? (cases || []) : (cases || []).filter((c: any) => c.user_id === user?.id);
+      // RBAC: filter case requests for non-admin using entity-based scoping
+      const scopedCases = isAdmin ? (cases || []) : (cases || []).filter((c: any) => {
+        if (c.user_id === user?.id) return true;
+        return canAccessPatient({
+          id: c.id,
+          clinic_name: c.clinic_name || null,
+          doctor_name: c.doctor_name || null,
+          lab_name: c.lab_name || null,
+        });
+      });
       setCaseRequests(scopedCases as unknown as CaseItem[]);
       setLoading(false);
     };

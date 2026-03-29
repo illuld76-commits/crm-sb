@@ -198,6 +198,7 @@ export default function CaseSubmission() {
         doctor_name: formData.doctor_name,
         lab_name: formData.lab_name,
         patient_id: selectedPatientId,
+        work_order_type: formData.request_type || null,
         dynamic_data: {
           ...dynamicFormData,
           ...(toothChartData.length > 0 ? { tooth_chart: toothChartData } : {}),
