@@ -28,7 +28,7 @@ export default function CaseSubmission() {
   const { id } = useParams();
   const { user } = useAuth();
   const { isAdmin } = useRole();
-  const { allowedClinics, allowedDoctors, allowedLabs, canAccessPatient, filterEntities, loading: scopeLoading } = useUserScope();
+  const { allowedClinics, allowedDoctors, allowedLabs, allowedCompanies, canAccessPatient, loading: scopeLoading } = useUserScope();
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [presets, setPresets] = useState<Preset[]>([]);
@@ -37,25 +37,51 @@ export default function CaseSubmission() {
   const [formData, setFormData] = useState({
     patient_name: '', patient_age: '', patient_sex: 'male',
     request_type: '', request_name: '', notes: '', status: 'draft',
-    clinic_name: '', doctor_name: '', lab_name: '',
+    clinic_name: '', doctor_name: '', lab_name: '', company_name: '',
   });
   const [existingAttachments, setExistingAttachments] = useState<FileAttachment[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [previewFile, setPreviewFile] = useState<{ name: string; url: string; type: string; size: number } | null>(null);
 
   // Multi-request type support
-  const [selectedRequestTypes, setSelectedRequestTypes] = useState<{ presetId: string; name: string; qty: number; fee: number }[]>([]);
-  const [dynamicFormData, setDynamicFormData] = useState<Record<string, any>>({});
-  const [toothChartData, setToothChartData] = useState<ToothSelection[]>([]);
+  const [selectedRequestTypes, setSelectedRequestTypes] = useState<{ id: string; presetId: string; name: string; qty: number; fee: number }[]>([]);
+  const [dynamicFormData, setDynamicFormData] = useState<Record<string, Record<string, any>>>({});
 
   // Existing patient search for linking
   const [patientSearch, setPatientSearch] = useState('');
-  const [patientResults, setPatientResults] = useState<{ id: string; patient_name: string; doctor_name: string | null; clinic_name: string | null }[]>([]);
+  const [patientResults, setPatientResults] = useState<{ id: string; patient_name: string; patient_id_label?: string | null; doctor_name: string | null; clinic_name: string | null; lab_name?: string | null; company_name?: string | null }[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patientSearchFocused, setPatientSearchFocused] = useState(false);
 
   // Settings entities for dropdowns
   const [settingsEntities, setSettingsEntities] = useState<{ entity_name: string; entity_type: string }[]>([]);
+
+  const createRequestTypeItem = (name = '', presetId = '', qty = 1, fee = 0) => ({
+    id: crypto.randomUUID(),
+    presetId,
+    name,
+    qty,
+    fee,
+  });
+
+  const setWorkOrderFieldValue = (formKey: string, fieldLabel: string, value: any) => {
+    setDynamicFormData(prev => ({
+      ...prev,
+      [formKey]: {
+        ...(prev[formKey] || {}),
+        [fieldLabel]: value,
+      },
+    }));
+  };
+
+  const removeRequestTypeItem = (itemId: string) => {
+    setSelectedRequestTypes(prev => prev.filter(item => item.id !== itemId));
+    setDynamicFormData(prev => {
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
+  };
 
   useEffect(() => {
     supabase.from('presets').select('*').order('name').then(({ data }) => {
@@ -75,11 +101,24 @@ export default function CaseSubmission() {
     if (!isAdmin && allowedLabs && allowedLabs.length === 1 && !id) {
       setFormData(prev => ({ ...prev, lab_name: allowedLabs[0] }));
     }
+    if (!isAdmin && allowedCompanies && allowedCompanies.length === 1 && !id) {
+      setFormData(prev => ({ ...prev, company_name: allowedCompanies[0] }));
+    }
 
     if (id) {
       supabase.from('case_requests').select('*').eq('id', id).single().then(({ data }) => {
         if (data) {
           const typed = data as unknown as CaseRequest;
+          const savedDynamic = ((typed.dynamic_data || {}) as Record<string, any>);
+          const savedWorkOrderForms = savedDynamic.work_order_forms && typeof savedDynamic.work_order_forms === 'object'
+            ? savedDynamic.work_order_forms as Record<string, Record<string, any>>
+            : null;
+          const legacyDynamic = { ...savedDynamic };
+          delete legacyDynamic.work_order_forms;
+          const legacyToothChart = Array.isArray(legacyDynamic.tooth_chart) ? legacyDynamic.tooth_chart : undefined;
+          delete legacyDynamic.tooth_chart;
+          delete legacyDynamic.company_name;
+
           setCaseData(typed);
           setFormData({
             patient_name: data.patient_name || '', patient_age: data.patient_age?.toString() || '',
@@ -87,16 +126,39 @@ export default function CaseSubmission() {
             request_name: (data as any).request_name || '',
             notes: data.notes || '', status: data.status || 'draft',
             clinic_name: data.clinic_name || '', doctor_name: data.doctor_name || '', lab_name: data.lab_name || '',
+            company_name: savedDynamic.company_name || '',
           });
           setExistingAttachments((data.attachments as unknown as FileAttachment[]) || []);
           setSelectedPatientId(data.patient_id || null);
+          const savedItems = (((data as any).request_items as any[]) || []).map((item: any) => createRequestTypeItem(
+            item.request_type || '',
+            item.preset_id || '',
+            item.qty || 1,
+            item.rate || 0,
+          ));
+          if (savedItems.length > 0) {
+            setSelectedRequestTypes(savedItems);
+          } else if (data.request_type) {
+            const preset = (typed as any)?.request_type ? presets.find(p => p.category === 'request_type' && p.name === data.request_type) : null;
+            setSelectedRequestTypes([createRequestTypeItem(data.request_type, preset?.id || '', 1, preset?.fee_usd || preset?.unit_price || 0)]);
+          }
+          if (savedWorkOrderForms) {
+            setDynamicFormData(savedWorkOrderForms);
+          } else if (Object.keys(legacyDynamic).length > 0 || legacyToothChart) {
+            setDynamicFormData({
+              main: {
+                ...legacyDynamic,
+                ...(legacyToothChart ? { tooth_chart: legacyToothChart } : {}),
+              },
+            });
+          }
           if (data.status !== 'draft') {
             setIsViewMode(true);
           }
         }
       });
     }
-  }, [id]);
+  }, [allowedClinics, allowedCompanies, allowedDoctors, allowedLabs, id, isAdmin, presets]);
 
   // Auto-sync: when request_type changes, add it to selectedRequestTypes if not already there
   useEffect(() => {
@@ -104,22 +166,22 @@ export default function CaseSubmission() {
     const alreadyAdded = selectedRequestTypes.some(rt => rt.name === formData.request_type);
     if (!alreadyAdded) {
       const preset = presets.find(p => p.category === 'request_type' && p.name === formData.request_type);
-      setSelectedRequestTypes(prev => [...prev, {
-        presetId: preset?.id || '',
-        name: formData.request_type,
-        qty: 1,
-        fee: preset?.fee_usd || preset?.unit_price || 0,
-      }]);
+      setSelectedRequestTypes(prev => [...prev, createRequestTypeItem(
+        formData.request_type,
+        preset?.id || '',
+        1,
+        preset?.fee_usd || preset?.unit_price || 0,
+      )]);
     }
-  }, [formData.request_type]);
+  }, [formData.request_type, presets, selectedRequestTypes]);
 
   // Patient search (RBAC-scoped) — show dropdown on focus, filter as user types
   useEffect(() => {
     if (!patientSearchFocused) { setPatientResults([]); return; }
     const t = setTimeout(async () => {
-      let query = supabase.from('patients').select('id, patient_name, doctor_name, clinic_name, lab_name, company_name, user_id, primary_user_id, secondary_user_id');
+      let query = supabase.from('patients').select('id, patient_name, patient_id_label, doctor_name, clinic_name, lab_name, company_name, user_id, primary_user_id, secondary_user_id');
       if (patientSearch.length >= 1) {
-        query = query.ilike('patient_name', `%${patientSearch}%`);
+        query = query.or(`patient_name.ilike.%${patientSearch}%,patient_id_label.ilike.%${patientSearch}%`);
       }
       const { data } = await query.limit(20);
       const results = (data || []).filter(p => canAccessPatient(p));
@@ -131,7 +193,7 @@ export default function CaseSubmission() {
   const selectExistingPatient = async (p: typeof patientResults[0]) => {
     setSelectedPatientId(p.id);
     // Fetch full patient data including age and sex for auto-population
-    const { data: fullPatient } = await supabase.from('patients').select('patient_name, doctor_name, clinic_name, lab_name, patient_age, patient_sex').eq('id', p.id).single();
+    const { data: fullPatient } = await supabase.from('patients').select('patient_name, doctor_name, clinic_name, lab_name, company_name, patient_age, patient_sex').eq('id', p.id).single();
     if (fullPatient) {
       setFormData(prev => ({
         ...prev,
@@ -139,6 +201,7 @@ export default function CaseSubmission() {
         doctor_name: fullPatient.doctor_name || prev.doctor_name,
         clinic_name: fullPatient.clinic_name || prev.clinic_name,
         lab_name: fullPatient.lab_name || prev.lab_name,
+        company_name: fullPatient.company_name || prev.company_name,
         patient_age: fullPatient.patient_age?.toString() || prev.patient_age,
         patient_sex: fullPatient.patient_sex || prev.patient_sex,
       }));
@@ -148,10 +211,13 @@ export default function CaseSubmission() {
         patient_name: p.patient_name,
         doctor_name: p.doctor_name || prev.doctor_name,
         clinic_name: p.clinic_name || prev.clinic_name,
+        lab_name: p.lab_name || prev.lab_name,
+        company_name: p.company_name || prev.company_name,
       }));
     }
     setPatientSearch('');
     setPatientResults([]);
+    setPatientSearchFocused(false);
   };
 
   const handleSubmit = async (isSubmitted: boolean) => {
@@ -182,6 +248,20 @@ export default function CaseSubmission() {
         preset_id: rt.presetId,
       }));
 
+      const cleanedWorkOrderForms = Object.fromEntries(
+        Object.entries(dynamicFormData)
+          .map(([formKey, values]) => {
+            const cleanedValues = Object.fromEntries(
+              Object.entries(values || {}).filter(([, value]) => {
+                if (Array.isArray(value)) return value.length > 0;
+                return value !== '' && value !== null && value !== undefined;
+              }),
+            );
+            return [formKey, cleanedValues];
+          })
+          .filter(([, values]) => Object.keys(values).length > 0),
+      );
+
       const payload: any = {
         patient_name: formData.patient_name,
         patient_age: formData.patient_age ? parseInt(formData.patient_age) : null,
@@ -200,8 +280,8 @@ export default function CaseSubmission() {
         patient_id: selectedPatientId,
         work_order_type: formData.request_type || null,
         dynamic_data: {
-          ...dynamicFormData,
-          ...(toothChartData.length > 0 ? { tooth_chart: toothChartData } : {}),
+          ...(formData.company_name ? { company_name: formData.company_name } : {}),
+          ...(Object.keys(cleanedWorkOrderForms).length > 0 ? { work_order_forms: cleanedWorkOrderForms } : {}),
         } as any,
       };
 
@@ -316,15 +396,18 @@ export default function CaseSubmission() {
     return map[s] || 'bg-muted text-muted-foreground';
   };
 
-  const doctorEntities = filterEntities(settingsEntities, 'doctor').length > 0
-    ? filterEntities(settingsEntities, 'doctor')
-    : (isAdmin ? settingsEntities.filter(e => e.entity_type === 'doctor') : []);
-  const clinicEntities = filterEntities(settingsEntities, 'clinic').length > 0
-    ? filterEntities(settingsEntities, 'clinic')
-    : (isAdmin ? settingsEntities.filter(e => e.entity_type === 'clinic') : []);
-  const labEntities = filterEntities(settingsEntities, 'lab').length > 0
-    ? filterEntities(settingsEntities, 'lab')
-    : (isAdmin ? settingsEntities.filter(e => e.entity_type === 'lab') : []);
+  const getScopedEntities = (type: string, allowed: string[] | null | undefined) => {
+    const typed = settingsEntities.filter(entity => entity.entity_type === type);
+    const deduped = Array.from(new Map(typed.map(entity => [entity.entity_name, entity])).values());
+    if (isAdmin) return deduped;
+    if (!allowed || allowed.length === 0) return [];
+    return deduped.filter(entity => allowed.includes(entity.entity_name));
+  };
+
+  const doctorEntities = getScopedEntities('doctor', allowedDoctors);
+  const clinicEntities = getScopedEntities('clinic', allowedClinics);
+  const labEntities = getScopedEntities('lab', allowedLabs);
+  const companyEntities = getScopedEntities('company', allowedCompanies);
 
   // ─── VIEW MODE (submitted case detail) ───
   if (isViewMode && caseData) {
@@ -422,14 +505,15 @@ export default function CaseSubmission() {
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-sm">Case Information</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
-                <div><span className="text-muted-foreground text-xs block">Patient</span><span className="font-medium">{caseData.patient_name}</span></div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                  <div><span className="text-muted-foreground text-xs block">Project</span><span className="font-medium">{caseData.patient_name}</span></div>
                 {caseData.patient_age && <div><span className="text-muted-foreground text-xs block">Age</span><span>{caseData.patient_age}y</span></div>}
                 {caseData.patient_sex && <div><span className="text-muted-foreground text-xs block">Sex</span><span className="capitalize">{caseData.patient_sex}</span></div>}
                 <div><span className="text-muted-foreground text-xs block">Type</span><span>{caseData.request_type}</span></div>
                 {caseData.doctor_name && <div><span className="text-muted-foreground text-xs block">Doctor</span><span>{caseData.doctor_name}</span></div>}
                 {caseData.clinic_name && <div><span className="text-muted-foreground text-xs block">Clinic</span><span>{caseData.clinic_name}</span></div>}
                 {caseData.lab_name && <div><span className="text-muted-foreground text-xs block">Lab</span><span>{caseData.lab_name}</span></div>}
+                  {((caseData.dynamic_data as any)?.company_name) && <div><span className="text-muted-foreground text-xs block">Company</span><span>{(caseData.dynamic_data as any).company_name}</span></div>}
               </div>
               {caseData.notes && (
                 <>
@@ -481,6 +565,38 @@ export default function CaseSubmission() {
               <CardHeader className="pb-3"><CardTitle className="text-sm">Additional Details</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 {Object.entries(caseData.dynamic_data).map(([key, val]) => {
+                  if (key === 'work_order_forms' && val && typeof val === 'object' && !Array.isArray(val)) {
+                    return (
+                      <div key={key} className="space-y-3">
+                        <span className="text-muted-foreground text-xs block capitalize">Work Order Forms</span>
+                        {Object.entries(val as Record<string, Record<string, any>>).map(([formKey, fields]) => (
+                          <Card key={formKey} className="border-border/50">
+                            <CardContent className="p-4 space-y-3">
+                              <p className="text-sm font-medium">{formKey === 'main' ? 'Primary Work Order' : `Request Item ${formKey.slice(-6)}`}</p>
+                              {Object.entries(fields || {}).map(([fieldKey, fieldValue]) => {
+                                if (fieldKey === 'tooth_chart' && Array.isArray(fieldValue)) {
+                                  return (
+                                    <div key={fieldKey}>
+                                      <span className="text-muted-foreground text-xs block capitalize mb-2">Tooth Chart</span>
+                                      <ToothChartSelector value={fieldValue as ToothSelection[]} onChange={() => {}} readOnly />
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <div key={fieldKey} className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                                    <div>
+                                      <span className="text-muted-foreground text-xs block capitalize">{fieldKey.replace(/_/g, ' ')}</span>
+                                      <span>{Array.isArray(fieldValue) ? fieldValue.join(', ') : String(fieldValue)}</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    );
+                  }
                   if (key === 'tooth_chart' && Array.isArray(val)) {
                     return (
                       <div key={key}>
@@ -549,15 +665,15 @@ export default function CaseSubmission() {
         <Card>
           <CardHeader>
             <CardTitle>{id ? 'Edit Case Request' : 'Submit New Case Request'}</CardTitle>
-            <CardDescription>Fill in patient details and attach relevant files</CardDescription>
+              <CardDescription>Fill in project details and attach relevant files</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Link to existing patient */}
+              {/* Link to existing project */}
             <div className="space-y-2">
-              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Link to Existing Patient (Optional)</Label>
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Link to Existing Project (Optional)</Label>
               <div className="relative">
                 <Input
-                  placeholder="Search existing patients..."
+                    placeholder="Search existing projects..."
                   value={patientSearch}
                   onChange={e => setPatientSearch(e.target.value)}
                   onFocus={() => setPatientSearchFocused(true)}
@@ -568,11 +684,12 @@ export default function CaseSubmission() {
                     {patientResults.length > 0 ? patientResults.map(p => (
                       <div key={p.id} className="px-3 py-2 text-sm hover:bg-accent cursor-pointer" onClick={() => selectExistingPatient(p)}>
                         <span className="font-medium">{p.patient_name}</span>
+                          {p.patient_id_label && <span className="text-muted-foreground text-xs"> • {p.patient_id_label}</span>}
                         {p.doctor_name && <span className="text-muted-foreground"> • {p.doctor_name}</span>}
                         {p.clinic_name && <span className="text-muted-foreground text-xs"> • {p.clinic_name}</span>}
                       </div>
                     )) : (
-                      <div className="px-3 py-2 text-sm text-muted-foreground">No patients found</div>
+                        <div className="px-3 py-2 text-sm text-muted-foreground">No projects found</div>
                     )}
                   </div>
                 )}
@@ -580,7 +697,7 @@ export default function CaseSubmission() {
               {selectedPatientId && (
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className="text-xs">
-                    <UserPlus className="w-3 h-3 mr-1" /> Linked: {formData.patient_name}
+                    <UserPlus className="w-3 h-3 mr-1" /> Linked project: {formData.patient_name}
                   </Badge>
                   <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setSelectedPatientId(null)}><X className="w-3 h-3" /></Button>
                 </div>
@@ -595,8 +712,8 @@ export default function CaseSubmission() {
                 <Input value={formData.request_name} onChange={e => setFormData(p => ({ ...p, request_name: e.target.value }))} placeholder="e.g. Upper Arch Aligners" />
               </div>
               <div className="space-y-2">
-                <Label>Patient Name *</Label>
-                <Input value={formData.patient_name} onChange={e => setFormData(p => ({ ...p, patient_name: e.target.value }))} placeholder="Patient name" />
+                <Label>Project Name *</Label>
+                <Input value={formData.patient_name} onChange={e => setFormData(p => ({ ...p, patient_name: e.target.value }))} placeholder="Project name" />
               </div>
               <div className="space-y-2">
                 <Label>Request Type *</Label>
@@ -669,6 +786,16 @@ export default function CaseSubmission() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label>Company</Label>
+                <Select value={formData.company_name || '__none__'} onValueChange={v => setFormData(p => ({ ...p, company_name: v === '__none__' ? '' : v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select company..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {companyEntities.map(e => <SelectItem key={`company-${e.entity_name}`} value={e.entity_name}>{e.entity_name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* Request Items (qty + billing) */}
@@ -680,9 +807,9 @@ export default function CaseSubmission() {
                     const reqTypePresets = presets.filter(p => p.category === 'request_type');
                     if (reqTypePresets.length > 0) {
                       const first = reqTypePresets[0];
-                      setSelectedRequestTypes(prev => [...prev, { presetId: first.id, name: first.name, qty: 1, fee: first.fee_usd || first.unit_price || 0 }]);
+                        setSelectedRequestTypes(prev => [...prev, createRequestTypeItem(first.name, first.id, 1, first.fee_usd || first.unit_price || 0)]);
                     } else {
-                      setSelectedRequestTypes(prev => [...prev, { presetId: '', name: formData.request_type || 'Service', qty: 1, fee: 0 }]);
+                        setSelectedRequestTypes(prev => [...prev, createRequestTypeItem(formData.request_type || 'Service', '', 1, 0)]);
                     }
                   }}>
                     <Plus className="w-3 h-3 mr-1" /> Add Item
@@ -692,7 +819,7 @@ export default function CaseSubmission() {
                   <p className="text-xs text-muted-foreground">No items added. Click "Add Item" to include request types with quantities for billing.</p>
                 )}
                 {selectedRequestTypes.map((rt, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
+                  <div key={rt.id} className="flex items-center gap-2">
                     <Select value={rt.name} onValueChange={v => {
                       const preset = presets.find(p => p.category === 'request_type' && p.name === v);
                       setSelectedRequestTypes(prev => prev.map((r, i) => i === idx ? { ...r, name: v, presetId: preset?.id || '', fee: preset?.fee_usd || preset?.unit_price || r.fee } : r));
@@ -716,7 +843,7 @@ export default function CaseSubmission() {
                         onChange={e => setSelectedRequestTypes(prev => prev.map((r, i) => i === idx ? { ...r, fee: parseFloat(e.target.value) || 0 } : r))} />
                     </div>
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive shrink-0"
-                      onClick={() => setSelectedRequestTypes(prev => prev.filter((_, i) => i !== idx))}>
+                      onClick={() => removeRequestTypeItem(rt.id)}>
                       <Trash2 className="w-3 h-3" />
                     </Button>
                   </div>
@@ -737,15 +864,15 @@ export default function CaseSubmission() {
             {/* Dynamic Work Order Form Fields — multi-item tabs */}
             {(() => {
               // Collect all work order forms from selectedRequestTypes + formData.request_type
-              const woForms: { name: string; wo: Preset; idx: number }[] = [];
+              const woForms: { id: string; name: string; wo: Preset }[] = [];
               
               // From selected request items
-              selectedRequestTypes.forEach((rt, idx) => {
+              selectedRequestTypes.forEach((rt) => {
                 const reqType = presets.find(p => p.category === 'request_type' && p.name === rt.name);
                 const linkedWoId = reqType?.unit;
                 const wo = linkedWoId ? presets.find(p => p.id === linkedWoId) : presets.find(p => p.category === 'work_order' && p.name === rt.name);
                 if (wo?.fields && (wo.fields as any[]).length > 0) {
-                  woForms.push({ name: rt.name, wo, idx });
+                  woForms.push({ id: rt.id, name: rt.name, wo });
                 }
               });
 
@@ -755,7 +882,7 @@ export default function CaseSubmission() {
                 const linkedWoId = reqType?.unit;
                 const wo = linkedWoId ? presets.find(p => p.id === linkedWoId) : presets.find(p => p.category === 'work_order' && p.name === formData.request_type);
                 if (wo?.fields && (wo.fields as any[]).length > 0) {
-                  woForms.push({ name: formData.request_type, wo, idx: -1 });
+                  woForms.push({ id: 'main', name: formData.request_type, wo });
                 }
               }
 
@@ -764,11 +891,12 @@ export default function CaseSubmission() {
               const renderWoFields = (wo: Preset, dataKey: string) => (
                 <div className="space-y-3">
                   {(wo.fields as any[]).map((field: any) => {
+                      const fieldValue = dynamicFormData[dataKey]?.[field.label];
                       if (field.type === 'tooth_chart') {
                         return (
                           <div key={field.id} className="space-y-1">
                             <Label className="text-xs">{field.label || 'Tooth Selection'}</Label>
-                            <ToothChartSelector value={toothChartData} onChange={setToothChartData} />
+                            <ToothChartSelector value={(dynamicFormData[dataKey]?.tooth_chart as ToothSelection[]) || []} onChange={value => setWorkOrderFieldValue(dataKey, 'tooth_chart', value)} />
                           </div>
                         );
                       }
@@ -776,7 +904,7 @@ export default function CaseSubmission() {
                         return (
                           <div key={field.id} className="space-y-1">
                             <Label className="text-xs">{field.label}{field.required && ' *'}</Label>
-                            <Select value={dynamicFormData[field.label] || ''} onValueChange={v => setDynamicFormData(prev => ({ ...prev, [field.label]: v }))}>
+                            <Select value={fieldValue || ''} onValueChange={v => setWorkOrderFieldValue(dataKey, field.label, v)}>
                               <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select..." /></SelectTrigger>
                               <SelectContent>{field.options.map((o: string) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
                             </Select>
@@ -787,7 +915,7 @@ export default function CaseSubmission() {
                         return (
                           <div key={field.id} className="space-y-1">
                             <Label className="text-xs">{field.label}{field.required && ' *'}</Label>
-                            <Select value={dynamicFormData[field.label] || ''} onValueChange={v => setDynamicFormData(prev => ({ ...prev, [field.label]: v }))}>
+                            <Select value={fieldValue || ''} onValueChange={v => setWorkOrderFieldValue(dataKey, field.label, v)}>
                               <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select..." /></SelectTrigger>
                               <SelectContent>{field.options.map((o: string) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
                             </Select>
@@ -795,17 +923,16 @@ export default function CaseSubmission() {
                         );
                       }
                       if (field.type === 'checkbox' && field.options) {
+                        const selectedValues = Array.isArray(fieldValue) ? fieldValue : [];
                         return (
                           <div key={field.id} className="space-y-1">
                             <Label className="text-xs">{field.label}</Label>
                             <div className="flex flex-wrap gap-2">
                               {field.options.map((o: string) => (
                                 <label key={o} className="flex items-center gap-1 text-xs">
-                                  <input type="checkbox" checked={dynamicFormData[field.label]?.includes(o)} onChange={e => {
-                                    setDynamicFormData(prev => {
-                                      const current = prev[field.label] || [];
-                                      return { ...prev, [field.label]: e.target.checked ? [...current, o] : current.filter((x: string) => x !== o) };
-                                    });
+                                  <input type="checkbox" checked={selectedValues.includes(o)} onChange={e => {
+                                    const current = Array.isArray(dynamicFormData[dataKey]?.[field.label]) ? dynamicFormData[dataKey][field.label] : [];
+                                    setWorkOrderFieldValue(dataKey, field.label, e.target.checked ? [...current, o] : current.filter((x: string) => x !== o));
                                   }} />
                                   {o}
                                 </label>
@@ -818,14 +945,14 @@ export default function CaseSubmission() {
                         return (
                           <div key={field.id} className="space-y-1">
                             <Label className="text-xs">{field.label}{field.required && ' *'}</Label>
-                            <Textarea className="text-xs" rows={3} value={dynamicFormData[field.label] || ''} onChange={e => setDynamicFormData(prev => ({ ...prev, [field.label]: e.target.value }))} />
+                            <Textarea className="text-xs" rows={3} value={fieldValue || ''} onChange={e => setWorkOrderFieldValue(dataKey, field.label, e.target.value)} />
                           </div>
                         );
                       }
                       return (
                         <div key={field.id} className="space-y-1">
                           <Label className="text-xs">{field.label}{field.required && ' *'}</Label>
-                          <Input className="h-8 text-xs" value={dynamicFormData[field.label] || ''} onChange={e => setDynamicFormData(prev => ({ ...prev, [field.label]: e.target.value }))} />
+                          <Input className="h-8 text-xs" value={fieldValue || ''} onChange={e => setWorkOrderFieldValue(dataKey, field.label, e.target.value)} />
                         </div>
                       );
                     })}
@@ -833,8 +960,7 @@ export default function CaseSubmission() {
               );
 
               if (woForms.length === 1) {
-                const { wo, idx } = woForms[0];
-                const dataKey = idx >= 0 ? `item_${idx}` : 'main';
+                const { wo, id: dataKey } = woForms[0];
                 return (
                   <Card className="border-primary/20 bg-primary/5">
                     <CardContent className="p-4 space-y-3">
@@ -849,16 +975,16 @@ export default function CaseSubmission() {
               return (
                 <Card className="border-primary/20 bg-primary/5">
                   <CardContent className="p-4 space-y-3">
-                    <Tabs defaultValue={`wo-0`}>
+                    <Tabs defaultValue={woForms[0]?.id}>
                       <TabsList className="w-full flex-wrap h-auto">
-                        {woForms.map((wf, i) => (
-                          <TabsTrigger key={i} value={`wo-${i}`} className="text-xs">{wf.name}</TabsTrigger>
+                        {woForms.map((wf) => (
+                          <TabsTrigger key={wf.id} value={wf.id} className="text-xs">{wf.name}</TabsTrigger>
                         ))}
                       </TabsList>
-                      {woForms.map((wf, i) => (
-                        <TabsContent key={i} value={`wo-${i}`}>
+                      {woForms.map((wf) => (
+                        <TabsContent key={wf.id} value={wf.id}>
                           <h4 className="text-sm font-semibold mb-2">📋 {wf.wo.name}</h4>
-                          {renderWoFields(wf.wo, `item_${wf.idx}`)}
+                          {renderWoFields(wf.wo, wf.id)}
                         </TabsContent>
                       ))}
                     </Tabs>
