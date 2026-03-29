@@ -75,7 +75,7 @@ export default function GlobalKanban() {
         supabase.from('patients').select('id, patient_name, doctor_name, clinic_name, lab_name, company_name, user_id, primary_user_id, secondary_user_id').is('archived_at', null),
         supabase.from('phases').select('id, patient_id, phase_name').eq('is_deleted', false),
         supabase.from('treatment_plans').select('*').eq('is_deleted', false).order('sort_order'),
-        supabase.from('case_requests').select('id, patient_name, status, request_type, created_at, display_id, clinic_name, doctor_name, notes, attachments, is_deleted').eq('is_deleted', false),
+        supabase.from('case_requests').select('id, patient_name, status, request_type, created_at, display_id, clinic_name, doctor_name, lab_name, notes, attachments, is_deleted, user_id').eq('is_deleted', false),
         supabase.from('plan_remarks').select('plan_id'),
       ]);
 

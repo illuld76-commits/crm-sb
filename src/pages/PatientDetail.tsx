@@ -471,9 +471,12 @@ export default function PatientDetail() {
   };
 
   const addPhase = async () => {
-    if (!patient) return;
+    if (!patient || !user) return;
     const { data, error } = await supabase.from('phases').insert({ patient_id: patient.id, phase_name: `Phase ${phases.length + 1}`, phase_order: phases.length }).select().single();
-    if (!error && data) {setPhases((prev) => [...prev, data]);setActivePhaseId(data.id);toast.success('Phase added!');}
+    if (!error && data) {
+      setPhases((prev) => [...prev, data]);setActivePhaseId(data.id);toast.success('Phase added!');
+      await logAction({ action: 'Add Phase', target_type: 'phase', target_id: data.id, target_name: data.phase_name, user_id: user.id, user_name: user.email || '', details: `Phase added to ${patientName}` });
+    }
   };
 
   const updatePhaseName = async (phaseId: string) => {
