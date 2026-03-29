@@ -29,6 +29,7 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import SnaponLogo from '@/components/SnaponLogo';
 import { getCompanyPeers } from '@/lib/company-scope';
+import { logAction } from '@/lib/audit';
 import IPRQuadrantDiagram from '@/components/IPRQuadrantDiagram';
 import ToothMovementChart from '@/components/ToothMovementChart';
 import CommunicationHub from '@/components/CommunicationHub';
@@ -432,7 +433,7 @@ export default function PatientDetail() {
   };
 
   const savePatient = async () => {
-    if (!user || !patientName.trim() || !isAdmin) return;
+    if (!user || !patientName.trim()) return;
     setSaving(true);
     try {
       const payload: any = {
@@ -452,14 +453,17 @@ export default function PatientDetail() {
       };
 
       if (isNew) {
+        if (!isAdmin) { toast.error('Only admin can create cases'); setSaving(false); return; }
         const { data, error } = await supabase.from('patients').insert({ ...payload, user_id: user.id }).select().single();
         if (error) throw error;
         await supabase.from('phases').insert({ patient_id: data.id, phase_name: 'Initial Treatment', phase_order: 0 });
+        await logAction({ action: 'Create Patient', target_type: 'patient', target_id: data.id, target_name: patientName, user_id: user.id, user_name: user.email || '', details: 'New case created' });
         toast.success('Case created!');
         navigate(`/patient/${data.id}`);
       } else if (patient) {
         const { error } = await supabase.from('patients').update(payload).eq('id', patient.id);
         if (error) throw error;
+        await logAction({ action: 'Update Patient', target_type: 'patient', target_id: patient.id, target_name: patientName, user_id: user.id, user_name: user.email || '', details: 'Case info updated' });
         toast.success('Case updated!');
       }
     } catch (err: any) {toast.error(err.message || 'Failed to save');}
@@ -467,9 +471,12 @@ export default function PatientDetail() {
   };
 
   const addPhase = async () => {
-    if (!patient) return;
+    if (!patient || !user) return;
     const { data, error } = await supabase.from('phases').insert({ patient_id: patient.id, phase_name: `Phase ${phases.length + 1}`, phase_order: phases.length }).select().single();
-    if (!error && data) {setPhases((prev) => [...prev, data]);setActivePhaseId(data.id);toast.success('Phase added!');}
+    if (!error && data) {
+      setPhases((prev) => [...prev, data]);setActivePhaseId(data.id);toast.success('Phase added!');
+      await logAction({ action: 'Add Phase', target_type: 'phase', target_id: data.id, target_name: data.phase_name, user_id: user.id, user_name: user.email || '', details: `Phase added to ${patientName}` });
+    }
   };
 
   const updatePhaseName = async (phaseId: string) => {

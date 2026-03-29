@@ -198,6 +198,7 @@ export default function CaseSubmission() {
         doctor_name: formData.doctor_name,
         lab_name: formData.lab_name,
         patient_id: selectedPatientId,
+        work_order_type: formData.request_type || null,
         dynamic_data: {
           ...dynamicFormData,
           ...(toothChartData.length > 0 ? { tooth_chart: toothChartData } : {}),
@@ -618,9 +619,6 @@ export default function CaseSubmission() {
                   <SelectContent>
                     {presets.filter(p => p.category === 'request_type').map(p => (
                       <SelectItem key={`rt-${p.id}`} value={p.name}>{p.name}{p.fee_usd ? ` (${p.fee_usd})` : ''}</SelectItem>
-                    ))}
-                    {presets.filter(p => p.category === 'work_order').map(p => (
-                      <SelectItem key={`wo-${p.id}`} value={p.name}>{p.name}</SelectItem>
                     ))}
                     <SelectItem value="Other">Other</SelectItem>
                   </SelectContent>

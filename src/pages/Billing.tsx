@@ -147,8 +147,17 @@ export default function Billing() {
       setAllPresets(all);
       setPresets(all.filter(p => p.category === 'fee' || p.category === 'item' || p.category === 'fee_item'));
     });
+    // Load profiles — admin sees all, non-admin sees company peers
     if (isAdmin) {
       supabase.from('profiles').select('user_id, display_name').then(({ data }) => setAllProfiles(data || []));
+    } else if (user) {
+      import('@/lib/company-scope').then(({ getCompanyPeers }) => {
+        getCompanyPeers(user.id).then(peerIds => {
+          supabase.from('profiles').select('user_id, display_name').then(({ data }) => {
+            setAllProfiles((data || []).filter(p => peerIds.includes(p.user_id)));
+          });
+        });
+      });
     }
 
     // Pre-fill from query params (bill from phase/plan)
@@ -372,8 +381,9 @@ export default function Billing() {
   };
 
   const saveInvoice = async (newStatus?: string) => {
-    if (!isAdmin) { toast.error('Only admin can edit invoices'); return; }
     if (!user || !patientName) { toast.error('Patient name required'); return; }
+    if (!isAdmin && isNew) { toast.error('Only admin can create invoices'); return; }
+    if (!isAdmin && !isNew && status !== 'draft') { toast.error('Only admin can edit non-draft invoices'); return; }
     if (!placeOfSupply) { toast.error('Place of Supply is required'); return; }
     if (isLocked) { toast.error('This invoice is locked (paid). Cannot edit.'); return; }
     setSaving(true);
@@ -506,7 +516,7 @@ export default function Billing() {
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
 
-  const isEditable = !isLocked && isAdmin;
+  const isEditable = !isLocked && (isAdmin || (status === 'draft'));
 
   return (
     <div className="min-h-screen bg-background">
@@ -638,7 +648,7 @@ export default function Billing() {
                   <div><Label className="text-xs">Address</Label><Input value={clientDetails.address || ''} onChange={e => setClientDetails(p => ({ ...p, address: e.target.value }))} disabled={!isEditable} /></div>
                 </div>
                 {/* Assign to users */}
-                {isAdmin && allProfiles.length > 0 && (
+                {allProfiles.length > 0 && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border/50">
                     <div>
                       <Label className="text-xs">Assign Primary User</Label>

@@ -75,7 +75,7 @@ export default function GlobalKanban() {
         supabase.from('patients').select('id, patient_name, doctor_name, clinic_name, lab_name, company_name, user_id, primary_user_id, secondary_user_id').is('archived_at', null),
         supabase.from('phases').select('id, patient_id, phase_name').eq('is_deleted', false),
         supabase.from('treatment_plans').select('*').eq('is_deleted', false).order('sort_order'),
-        supabase.from('case_requests').select('id, patient_name, status, request_type, created_at, display_id, clinic_name, doctor_name, notes, attachments, is_deleted').eq('is_deleted', false),
+        supabase.from('case_requests').select('id, patient_name, status, request_type, created_at, display_id, clinic_name, doctor_name, lab_name, notes, attachments, is_deleted, user_id').eq('is_deleted', false),
         supabase.from('plan_remarks').select('plan_id'),
       ]);
 
@@ -105,8 +105,16 @@ export default function GlobalKanban() {
       const cleanPlans = scopedPlans.map(({ _patient, ...rest }: any) => rest) as EnrichedPlan[];
       setPlans(cleanPlans);
 
-      // RBAC: filter case requests for non-admin
-      const scopedCases = isAdmin ? (cases || []) : (cases || []).filter((c: any) => c.user_id === user?.id);
+      // RBAC: filter case requests for non-admin using entity-based scoping
+      const scopedCases = isAdmin ? (cases || []) : (cases || []).filter((c: any) => {
+        if (c.user_id === user?.id) return true;
+        return canAccessPatient({
+          id: c.id,
+          clinic_name: c.clinic_name || null,
+          doctor_name: c.doctor_name || null,
+          lab_name: c.lab_name || null,
+        });
+      });
       setCaseRequests(scopedCases as unknown as CaseItem[]);
       setLoading(false);
     };
