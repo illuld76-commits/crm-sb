@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { CaseRequest, Preset } from '@/types';
+import { resolveCrmContacts } from '@/lib/crm-resolve';
 
 export interface ConversionResult {
   patientId: string;
@@ -27,6 +28,7 @@ export async function convertCaseToProject(
 
   // 1. Create patient if not linked
   if (!patientId) {
+    const companyName = (caseReq.dynamic_data as Record<string, any> | undefined)?.company_name || null;
     const { data: newPatient, error } = await supabase.from('patients').insert({
       patient_name: caseReq.patient_name,
       patient_age: caseReq.patient_age,
@@ -35,6 +37,7 @@ export async function convertCaseToProject(
       clinic_name: caseReq.clinic_name || null,
       doctor_name: caseReq.doctor_name || null,
       lab_name: caseReq.lab_name || null,
+      company_name: companyName,
     }).select('id').single();
     if (error || !newPatient) return null;
     patientId = newPatient.id;
@@ -159,34 +162,27 @@ export async function convertCaseToProject(
     }));
     const totalAmount = lineItems.reduce((s: number, li: any) => s + li.qty * li.rate, 0);
 
+    const companyName = (caseReq.dynamic_data as Record<string, any> | undefined)?.company_name || null;
+    const crm = await resolveCrmContacts({
+      company_name: companyName,
+      clinic_name: caseReq.clinic_name,
+      doctor_name: caseReq.doctor_name,
+      lab_name: caseReq.lab_name,
+    });
+
     // Auto-populate CRM details
-    let clientDetails: any = { name: caseReq.patient_name, email: '', address: '' };
+    let clientDetails: any = { name: crm.client?.name || caseReq.patient_name, email: crm.client?.email || '', address: crm.client?.address || '' };
     let merchantDetails: any = { name: '', email: '', address: '', bank_details: '' };
-    let gstNumber = '';
-    let placeOfSupply = '';
+    let gstNumber = crm.client?.gstNumber || '';
+    let placeOfSupply = crm.client?.state || '';
 
-    const clinicName = caseReq.clinic_name;
-    const labName = caseReq.lab_name;
-
-    if (clinicName) {
-      const { data: clinicEntity } = await supabase.from('settings_entities')
-        .select('*').eq('entity_name', clinicName).eq('entity_type', 'clinic').eq('is_deleted', false).single();
-      if (clinicEntity) {
-        clientDetails.email = (clinicEntity as any).email || '';
-        clientDetails.address = [(clinicEntity as any).address, (clinicEntity as any).city, (clinicEntity as any).state, (clinicEntity as any).country].filter(Boolean).join(', ');
-        gstNumber = (clinicEntity as any).gst_number || '';
-        placeOfSupply = (clinicEntity as any).state || '';
-      }
-    }
-
-    if (labName) {
-      const { data: labEntity } = await supabase.from('settings_entities')
-        .select('*').eq('entity_name', labName).eq('entity_type', 'lab').eq('is_deleted', false).single();
-      if (labEntity) {
-        merchantDetails.name = (labEntity as any).entity_name || '';
-        merchantDetails.email = (labEntity as any).email || '';
-        merchantDetails.address = [(labEntity as any).address, (labEntity as any).city, (labEntity as any).state, (labEntity as any).country].filter(Boolean).join(', ');
-      }
+    if (crm.merchant) {
+      merchantDetails = {
+        name: crm.merchant.name || '',
+        email: crm.merchant.email || '',
+        address: crm.merchant.address || '',
+        bank_details: '',
+      };
     }
 
     // Generate invoice number
@@ -217,6 +213,7 @@ export async function convertCaseToProject(
       gst_number: gstNumber || null,
       place_of_supply: placeOfSupply || null,
       hsn_code: '9993',
+      primary_user_id: crm.primaryUserId || null,
     }).select('id').single();
     if (inv) invoiceId = inv.id;
   }

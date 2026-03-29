@@ -21,6 +21,7 @@ import { sendNotification } from '@/lib/notifications';
 import { Invoice, Receipt, Preset } from '@/types';
 import { format } from 'date-fns';
 import { useRelationalNav } from '@/hooks/useRelationalNav';
+import { getCompanyPeers } from '@/lib/company-scope';
 
 const CURRENCIES = [
   { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
@@ -130,7 +131,7 @@ export default function Billing() {
 
   // Patient search
   const [patientSearch, setPatientSearch] = useState('');
-  const [patientResults, setPatientResults] = useState<{ id: string; patient_name: string; doctor_name: string | null; clinic_name: string | null }[]>([]);
+  const [patientResults, setPatientResults] = useState<{ id: string; patient_name: string; patient_id_label?: string | null; doctor_name: string | null; clinic_name: string | null; lab_name?: string | null; company_name?: string | null }[]>([]);
   const [patientSearchFocused, setPatientSearchFocused] = useState(false);
 
   // Phase/Plan data for selected patient
@@ -151,11 +152,9 @@ export default function Billing() {
     if (isAdmin) {
       supabase.from('profiles').select('user_id, display_name').then(({ data }) => setAllProfiles(data || []));
     } else if (user) {
-      import('@/lib/company-scope').then(({ getCompanyPeers }) => {
-        getCompanyPeers(user.id).then(peerIds => {
-          supabase.from('profiles').select('user_id, display_name').then(({ data }) => {
-            setAllProfiles((data || []).filter(p => peerIds.includes(p.user_id)));
-          });
+      getCompanyPeers(user.id).then(peerIds => {
+        supabase.from('profiles').select('user_id, display_name').then(({ data }) => {
+          setAllProfiles((data || []).filter(p => peerIds.includes(p.user_id)));
         });
       });
     }
@@ -211,15 +210,15 @@ export default function Billing() {
           setDueDate(format(due, 'yyyy-MM-dd'));
         });
     }
-  }, [invoiceId, isNew, searchParams]);
+  }, [invoiceId, isAdmin, isNew, searchParams, user]);
 
   // Patient search (RBAC-scoped) — show dropdown on focus
   useEffect(() => {
     if (!patientSearchFocused) { setPatientResults([]); return; }
     const t = setTimeout(async () => {
-      let query = supabase.from('patients').select('id, patient_name, doctor_name, clinic_name, lab_name, company_name, user_id, primary_user_id, secondary_user_id');
+      let query = supabase.from('patients').select('id, patient_name, patient_id_label, doctor_name, clinic_name, lab_name, company_name, user_id, primary_user_id, secondary_user_id');
       if (patientSearch.length >= 1) {
-        query = query.ilike('patient_name', `%${patientSearch}%`);
+        query = query.or(`patient_name.ilike.%${patientSearch}%,patient_id_label.ilike.%${patientSearch}%`);
       }
       const { data } = await query.limit(20);
       const results = (data || []).filter(p => canAccessPatient(p));
@@ -233,6 +232,7 @@ export default function Billing() {
     setPatientName(p.patient_name);
     setPatientSearch('');
     setPatientResults([]);
+    setPatientSearchFocused(false);
 
     // Fetch full patient record
     const { data: patientFull } = await supabase.from('patients').select('*').eq('id', p.id).single();
@@ -278,10 +278,13 @@ export default function Billing() {
     }
 
     // Fetch phases and plans for the patient
-    const { data: phasesData } = await supabase.from('phases').select('id, phase_name').eq('patient_id', p.id).order('phase_order');
+    const { data: phasesData } = await supabase.from('phases').select('id, phase_name, created_at').eq('patient_id', p.id).eq('is_deleted', false).order('phase_order');
     setPatientPhases(phasesData || []);
     if (phasesData && phasesData.length > 0) {
-      setPhaseId(phasesData[0].id);
+      const preferredPhaseId = phaseId && phasesData.some(phase => phase.id === phaseId)
+        ? phaseId
+        : phasesData[phasesData.length - 1].id;
+      setPhaseId(preferredPhaseId);
       const { data: plansData } = await supabase.from('treatment_plans').select('id, plan_name, phase_id, case_request_id').in('phase_id', phasesData.map(d => d.id));
       setPatientPlans((plansData || []) as any);
 
@@ -592,12 +595,12 @@ export default function Billing() {
             <Card>
               <CardHeader className="pb-3"><CardTitle className="text-sm">Client Details</CardTitle></CardHeader>
               <CardContent className="space-y-3">
-                <div className="relative">
-                  <Label className="text-xs">Patient Name *</Label>
+                 <div className="relative">
+                   <Label className="text-xs">Project Name *</Label>
                   <Input
                     value={patientName}
                     onChange={e => { if (!isEditable) return; setPatientName(e.target.value); setPatientSearch(e.target.value); }}
-                    placeholder="Search or type patient name..."
+                     placeholder="Search or type project name..."
                     disabled={!isEditable}
                     onFocus={() => setPatientSearchFocused(true)}
                     onBlur={() => setTimeout(() => setPatientSearchFocused(false), 200)}
@@ -607,11 +610,12 @@ export default function Billing() {
                       {patientResults.length > 0 ? patientResults.map(p => (
                         <div key={p.id} className="px-3 py-2 text-sm hover:bg-accent cursor-pointer" onClick={() => selectPatient(p)}>
                           <span className="font-medium">{p.patient_name}</span>
+                           {p.patient_id_label && <span className="text-muted-foreground text-xs"> • {p.patient_id_label}</span>}
                           {p.doctor_name && <span className="text-muted-foreground"> • {p.doctor_name}</span>}
                           {p.clinic_name && <span className="text-muted-foreground text-xs"> • {p.clinic_name}</span>}
                         </div>
                       )) : (
-                        <div className="px-3 py-2 text-sm text-muted-foreground">No patients found</div>
+                         <div className="px-3 py-2 text-sm text-muted-foreground">No projects found</div>
                       )}
                     </div>
                   )}
