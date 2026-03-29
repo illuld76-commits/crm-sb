@@ -727,8 +727,14 @@ export default function CaseSubmission() {
                     if (wo?.fields) {
                       // Pre-populate dynamic form keys
                       const keys: Record<string, any> = {};
-                      (wo.fields as any[]).forEach((f: any) => { keys[f.label] = ''; });
-                      setDynamicFormData(keys);
+                      (wo.fields as any[]).forEach((f: any) => { keys[f.label] = f.type === 'checkbox' ? [] : ''; });
+                      setDynamicFormData(prev => ({
+                        ...prev,
+                        main: {
+                          ...keys,
+                          ...(prev.main || {}),
+                        },
+                      }));
                     }
                   }
                 }}>
