@@ -619,9 +619,6 @@ export default function CaseSubmission() {
                     {presets.filter(p => p.category === 'request_type').map(p => (
                       <SelectItem key={`rt-${p.id}`} value={p.name}>{p.name}{p.fee_usd ? ` (${p.fee_usd})` : ''}</SelectItem>
                     ))}
-                    {presets.filter(p => p.category === 'work_order').map(p => (
-                      <SelectItem key={`wo-${p.id}`} value={p.name}>{p.name}</SelectItem>
-                    ))}
                     <SelectItem value="Other">Other</SelectItem>
                   </SelectContent>
                 </Select>
