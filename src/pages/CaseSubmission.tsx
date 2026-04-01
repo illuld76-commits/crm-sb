@@ -57,9 +57,11 @@ export default function CaseSubmission() {
   // Settings entities for dropdowns
   const [settingsEntities, setSettingsEntities] = useState<{ entity_name: string; entity_type: string }[]>([]);
   const lastSyncedRequestType = useRef('');
+  const itemIdCounter = useRef(0);
+  const loadedCaseId = useRef<string | null>(null);
 
   const createRequestTypeItem = (name = '', presetId = '', qty = 1, fee = 0) => ({
-    id: crypto.randomUUID(),
+    id: `rt-${name}-${itemIdCounter.current++}`,
     presetId,
     name,
     qty,
