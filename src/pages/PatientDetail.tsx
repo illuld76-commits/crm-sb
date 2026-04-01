@@ -657,7 +657,7 @@ export default function PatientDetail() {
                 {renderEntitySelect('Lab', labName, setLabName, labEntities, 'Select lab...')}
                 {renderEntitySelect('Company', companyName, setCompanyName, companyEntities, 'Select company...')}
                 <div className="space-y-2"><Label>Country / Location</Label><Input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="India" /></div>
-                <div className="space-y-2"><Label>Contact Email</Label><Input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="patient@email.com" /></div>
+                <div className="space-y-2"><Label>Contact Email</Label><Input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="contact@email.com" /></div>
                 <div className="space-y-2"><Label>Contact Phone</Label><Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="+91 98765 43210" /></div>
               </div>
               {isAdmin && allProfiles.length > 0 &&
