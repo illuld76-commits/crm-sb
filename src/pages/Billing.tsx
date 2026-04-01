@@ -140,7 +140,7 @@ export default function Billing() {
   const [showPresetPicker, setShowPresetPicker] = useState(false);
 
   // User assignment
-  const [allProfiles, setAllProfiles] = useState<{ user_id: string; display_name: string | null }[]>([]);
+  const [allProfiles, setAllProfiles] = useState<{ user_id: string; display_name: string | null; email?: string | null }[]>([]);
 
   useEffect(() => {
     supabase.from('presets').select('*').order('name').then(({ data }) => {
