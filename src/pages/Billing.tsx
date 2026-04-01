@@ -197,6 +197,13 @@ export default function Billing() {
         }
         setReceipts((recs || []) as unknown as Receipt[]);
         setExpenses((exps || []) as unknown as Expense[]);
+        // Fetch phases for existing invoice's patient
+        if (inv?.patient_id) {
+          const { data: phasesData } = await supabase.from('phases').select('id, phase_name').eq('patient_id', inv.patient_id).eq('is_deleted', false).order('phase_order');
+          setPatientPhases(phasesData || []);
+          const { data: plansData } = await supabase.from('treatment_plans').select('id, plan_name, phase_id').in('phase_id', (phasesData || []).map(d => d.id));
+          setPatientPlans((plansData || []) as any);
+        }
         setLoading(false);
       });
     } else {
