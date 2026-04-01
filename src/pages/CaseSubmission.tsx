@@ -52,6 +52,7 @@ export default function CaseSubmission() {
   const [patientResults, setPatientResults] = useState<{ id: string; patient_name: string; patient_id_label?: string | null; doctor_name: string | null; clinic_name: string | null; lab_name?: string | null; company_name?: string | null }[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patientSearchFocused, setPatientSearchFocused] = useState(false);
+  const [patientSearching, setPatientSearching] = useState(false);
 
   // Settings entities for dropdowns
   const [settingsEntities, setSettingsEntities] = useState<{ entity_name: string; entity_type: string }[]>([]);
@@ -158,7 +159,7 @@ export default function CaseSubmission() {
         }
       });
     }
-  }, [allowedClinics, allowedCompanies, allowedDoctors, allowedLabs, id, isAdmin, presets]);
+  }, [allowedClinics, allowedCompanies, allowedDoctors, allowedLabs, id, isAdmin]);
 
   // Auto-sync: when request_type changes, add it to selectedRequestTypes if not already there
   useEffect(() => {
@@ -177,7 +178,8 @@ export default function CaseSubmission() {
 
   // Patient search (RBAC-scoped) — show dropdown on focus, filter as user types
   useEffect(() => {
-    if (!patientSearchFocused) { setPatientResults([]); return; }
+    if (!patientSearchFocused) { setPatientResults([]); setPatientSearching(false); return; }
+    setPatientSearching(true);
     const t = setTimeout(async () => {
       let query = supabase.from('patients').select('id, patient_name, patient_id_label, doctor_name, clinic_name, lab_name, company_name, user_id, primary_user_id, secondary_user_id');
       if (patientSearch.length >= 1) {
@@ -186,6 +188,7 @@ export default function CaseSubmission() {
       const { data } = await query.limit(20);
       const results = (data || []).filter(p => canAccessPatient(p));
       setPatientResults(results.slice(0, 10));
+      setPatientSearching(false);
     }, 200);
     return () => clearTimeout(t);
   }, [patientSearch, patientSearchFocused, canAccessPatient]);
@@ -679,9 +682,11 @@ export default function CaseSubmission() {
                   onFocus={() => setPatientSearchFocused(true)}
                   onBlur={() => setTimeout(() => setPatientSearchFocused(false), 200)}
                 />
-                {patientSearchFocused && patientResults.length >= 0 && (
+                {patientSearchFocused && (
                   <div className="absolute z-10 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
-                    {patientResults.length > 0 ? patientResults.map(p => (
+                    {patientSearching ? (
+                      <div className="px-3 py-2 text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="w-3 h-3 animate-spin" /> Loading...</div>
+                    ) : patientResults.length > 0 ? patientResults.map(p => (
                       <div key={p.id} className="px-3 py-2 text-sm hover:bg-accent cursor-pointer" onClick={() => selectExistingPatient(p)}>
                         <span className="font-medium">{p.patient_name}</span>
                           {p.patient_id_label && <span className="text-muted-foreground text-xs"> • {p.patient_id_label}</span>}

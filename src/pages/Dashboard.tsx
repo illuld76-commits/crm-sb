@@ -165,7 +165,7 @@ export default function Dashboard() {
       // Permanent delete from archives
       const { error } = await supabase.from('patients').delete().eq('id', deleteTarget.id);
       if (error) { toast.error('Failed to delete permanently'); return; }
-      toast.success('Case permanently deleted');
+      toast.success('Project permanently deleted');
     } else {
       // Check if any plans are published
       const patientPhases = phases.filter(ph => ph.patient_id === deleteTarget.id);
@@ -176,12 +176,12 @@ export default function Dashboard() {
         // Soft delete (archive)
         const { error } = await supabase.from('patients').update({ archived_at: new Date().toISOString() }).eq('id', deleteTarget.id);
         if (error) { toast.error('Failed to archive'); return; }
-        toast.success('Case archived');
+        toast.success('Project archived');
       } else {
         // Direct delete for non-published
         const { error } = await supabase.from('patients').delete().eq('id', deleteTarget.id);
         if (error) { toast.error('Failed to delete'); return; }
-        toast.success('Case deleted');
+        toast.success('Project deleted');
       }
     }
 
@@ -197,7 +197,7 @@ export default function Dashboard() {
     const { error } = await supabase.from('patients').update({ archived_at: null }).eq('id', id);
     if (error) { toast.error('Failed to restore'); return; }
     setPatients(prev => prev.map(p => p.id === id ? { ...p, archived_at: null } : p));
-    toast.success('Case restored');
+    toast.success('Project restored');
   };
 
   const toggleExpand = (id: string, e: React.MouseEvent) => {
@@ -257,7 +257,7 @@ export default function Dashboard() {
   }, [currentPatients, search, filterDoctor, filterClinic, filterLab, sortBy]);
 
   const grouped = useMemo(() => {
-    if (groupBy === 'none') return { 'All Cases': filtered };
+    if (groupBy === 'none') return { 'All Projects': filtered };
     const key = groupBy === 'doctor' ? 'doctor_name' : groupBy === 'clinic' ? 'clinic_name' : groupBy === 'lab' ? 'lab_name' : 'country';
     const groups: Record<string, PatientRow[]> = {};
     filtered.forEach(p => {
@@ -431,7 +431,7 @@ export default function Dashboard() {
                 <LayoutGrid className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Active Cases</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Active Projects</p>
                 <p className="text-lg font-bold">{activePatients.length}</p>
               </div>
             </CardContent>
@@ -464,7 +464,7 @@ export default function Dashboard() {
                 <Columns3 className="w-5 h-5 text-destructive" />
               </div>
               <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Due This Week</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Active Cases</p>
                 <p className="text-lg font-bold">{dueThisWeekCount}</p>
               </div>
             </CardContent>
@@ -473,13 +473,13 @@ export default function Dashboard() {
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold">Cases</h1>
-            <p className="text-muted-foreground text-sm">{filtered.length} case{filtered.length !== 1 ? 's' : ''}</p>
+            <h1 className="text-2xl font-bold">Projects</h1>
+            <p className="text-muted-foreground text-sm">{filtered.length} project{filtered.length !== 1 ? 's' : ''}</p>
           </div>
           <div className="flex items-center gap-2">
             <BulkImportDialog onImported={fetchData} />
             <Button onClick={() => navigate('/patient/new')} className="dental-gradient gap-2">
-              <Plus className="w-4 h-4" /> New Case
+              <Plus className="w-4 h-4" /> New Project
             </Button>
           </div>
         </div>
@@ -586,11 +586,11 @@ export default function Dashboard() {
           <Card className="p-12 text-center">
             <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
             <p className="text-muted-foreground">
-              {activeTab === 'archived'
-                ? 'No archived cases.'
+               {activeTab === 'archived'
+                ? 'No archived projects.'
                 : patients.length === 0
-                  ? 'No cases yet. Add your first case!'
-                  : 'No cases match your search.'}
+                  ? 'No projects yet. Add your first project!'
+                  : 'No projects match your search.'}
             </p>
           </Card>
         ) : (
@@ -611,7 +611,7 @@ export default function Dashboard() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-muted/50 border-b border-border">
-                        <th className="text-left py-2 px-3 font-medium text-muted-foreground">Case</th>
+                        <th className="text-left py-2 px-3 font-medium text-muted-foreground">Project</th>
                         <th className="text-left py-2 px-3 font-medium text-muted-foreground hidden md:table-cell">Doctor</th>
                         <th className="text-left py-2 px-3 font-medium text-muted-foreground hidden lg:table-cell">Clinic</th>
                         <th className="text-left py-2 px-3 font-medium text-muted-foreground hidden lg:table-cell">Lab</th>
@@ -726,7 +726,7 @@ export default function Dashboard() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {isPermanentDelete ? 'Permanently Delete Case' : targetHasPublished ? 'Archive Published Case' : 'Delete Case'}
+              {isPermanentDelete ? 'Permanently Delete Project' : targetHasPublished ? 'Archive Published Project' : 'Delete Project'}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {isPermanentDelete ? (

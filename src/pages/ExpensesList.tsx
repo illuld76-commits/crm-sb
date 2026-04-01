@@ -58,17 +58,18 @@ export default function ExpensesList() {
       const { data } = await query;
       let rows = (data || []) as unknown as ExpenseRow[];
       if (!isAdmin) {
-        // Show own expenses + expenses linked to invoices where user is secondary
+        // Show own expenses + expenses linked to invoices where user is primary or secondary
         const expInvoiceIds = [...new Set(rows.filter(r => r.invoice_id).map(r => r.invoice_id!))];
-        let secondaryInvoiceIds = new Set<string>();
+        let allowedInvoiceIds = new Set<string>();
         if (expInvoiceIds.length > 0) {
-          const { data: invData } = await supabase.from('invoices').select('id, secondary_user_ids').in('id', expInvoiceIds);
+          const { data: invData } = await supabase.from('invoices').select('id, primary_user_id, secondary_user_ids').in('id', expInvoiceIds);
           (invData || []).forEach((inv: any) => {
+            if (inv.primary_user_id === user.id) allowedInvoiceIds.add(inv.id);
             const secIds = Array.isArray(inv.secondary_user_ids) ? inv.secondary_user_ids : [];
-            if (secIds.includes(user.id)) secondaryInvoiceIds.add(inv.id);
+            if (secIds.includes(user.id)) allowedInvoiceIds.add(inv.id);
           });
         }
-        rows = rows.filter(r => r.user_id === user.id || (r.invoice_id && secondaryInvoiceIds.has(r.invoice_id)));
+        rows = rows.filter(r => r.user_id === user.id || (r.invoice_id && allowedInvoiceIds.has(r.invoice_id)));
       }
       setExpenses(rows);
       setLoading(false);
