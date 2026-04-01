@@ -473,8 +473,8 @@ export default function Dashboard() {
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold">Cases</h1>
-            <p className="text-muted-foreground text-sm">{filtered.length} case{filtered.length !== 1 ? 's' : ''}</p>
+            <h1 className="text-2xl font-bold">Projects</h1>
+            <p className="text-muted-foreground text-sm">{filtered.length} project{filtered.length !== 1 ? 's' : ''}</p>
           </div>
           <div className="flex items-center gap-2">
             <BulkImportDialog onImported={fetchData} />
