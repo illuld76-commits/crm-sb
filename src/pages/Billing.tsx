@@ -253,9 +253,18 @@ export default function Billing() {
     const clientAddr = crm.client
       ? crm.client.address
       : [p.clinic_name, p.doctor_name].filter(Boolean).join(' • ');
+    // Resolve primary user email as fallback
+    let resolvedEmail = crm.client?.email || patientFull?.contact_email || '';
+    if (!resolvedEmail) {
+      const puId = patientFull?.primary_user_id || crm.primaryUserId;
+      if (puId) {
+        const { data: puProfile } = await supabase.from('profiles').select('email').eq('user_id', puId).single();
+        if (puProfile?.email) resolvedEmail = puProfile.email;
+      }
+    }
     setClientDetails({
-      name: p.patient_name,
-      email: crm.client?.email || patientFull?.contact_email || '',
+      name: crm.client?.entityName || p.patient_name,
+      email: resolvedEmail,
       address: clientAddr,
     });
 
