@@ -400,11 +400,15 @@ export default function CaseSubmission() {
   };
 
   const getScopedEntities = (type: string, allowed: string[] | null | undefined) => {
-    const typed = settingsEntities.filter(entity => entity.entity_type === type);
-    const deduped = Array.from(new Map(typed.map(entity => [entity.entity_name, entity])).values());
-    if (isAdmin) return deduped;
+    if (isAdmin) {
+      // Admin sees all entities from settings_entities for this type
+      const typed = settingsEntities.filter(entity => entity.entity_type === type);
+      return Array.from(new Map(typed.map(entity => [entity.entity_name, entity])).values());
+    }
+    // Non-admin: show entities from their assignments directly
+    // This ensures users see their assigned entities even if not in settings_entities
     if (!allowed || allowed.length === 0) return [];
-    return deduped.filter(entity => allowed.includes(entity.entity_name));
+    return allowed.map(name => ({ entity_name: name, entity_type: type }));
   };
 
   const doctorEntities = getScopedEntities('doctor', allowedDoctors);
