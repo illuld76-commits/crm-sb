@@ -52,6 +52,7 @@ export default function CaseSubmission() {
   const [patientResults, setPatientResults] = useState<{ id: string; patient_name: string; patient_id_label?: string | null; doctor_name: string | null; clinic_name: string | null; lab_name?: string | null; company_name?: string | null }[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patientSearchFocused, setPatientSearchFocused] = useState(false);
+  const [patientSearching, setPatientSearching] = useState(false);
 
   // Settings entities for dropdowns
   const [settingsEntities, setSettingsEntities] = useState<{ entity_name: string; entity_type: string }[]>([]);
