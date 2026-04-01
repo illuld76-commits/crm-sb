@@ -479,7 +479,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-2">
             <BulkImportDialog onImported={fetchData} />
             <Button onClick={() => navigate('/patient/new')} className="dental-gradient gap-2">
-              <Plus className="w-4 h-4" /> New Case
+              <Plus className="w-4 h-4" /> New Project
             </Button>
           </div>
         </div>
