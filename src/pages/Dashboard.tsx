@@ -165,7 +165,7 @@ export default function Dashboard() {
       // Permanent delete from archives
       const { error } = await supabase.from('patients').delete().eq('id', deleteTarget.id);
       if (error) { toast.error('Failed to delete permanently'); return; }
-      toast.success('Case permanently deleted');
+      toast.success('Project permanently deleted');
     } else {
       // Check if any plans are published
       const patientPhases = phases.filter(ph => ph.patient_id === deleteTarget.id);
