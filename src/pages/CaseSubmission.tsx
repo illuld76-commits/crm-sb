@@ -164,17 +164,17 @@ export default function CaseSubmission() {
   // Auto-sync: when request_type changes, add it to selectedRequestTypes if not already there
   useEffect(() => {
     if (!formData.request_type || formData.request_type === 'Other') return;
-    const alreadyAdded = selectedRequestTypes.some(rt => rt.name === formData.request_type);
-    if (!alreadyAdded) {
+    setSelectedRequestTypes(prev => {
+      if (prev.some(rt => rt.name === formData.request_type)) return prev;
       const preset = presets.find(p => p.category === 'request_type' && p.name === formData.request_type);
-      setSelectedRequestTypes(prev => [...prev, createRequestTypeItem(
+      return [...prev, createRequestTypeItem(
         formData.request_type,
         preset?.id || '',
         1,
         preset?.fee_usd || preset?.unit_price || 0,
-      )]);
-    }
-  }, [formData.request_type, presets, selectedRequestTypes]);
+      )];
+    });
+  }, [formData.request_type, presets]);
 
   // Patient search (RBAC-scoped) — show dropdown on focus, filter as user types
   useEffect(() => {

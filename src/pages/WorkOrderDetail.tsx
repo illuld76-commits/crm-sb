@@ -174,9 +174,9 @@ export default function WorkOrderDetail() {
           </TabsList>
 
           <TabsContent value="details" className="space-y-4">
-            {/* Patient info */}
+            {/* Project info */}
             <Card>
-              <CardHeader className="pb-3"><CardTitle className="text-sm">Patient Information</CardTitle></CardHeader>
+              <CardHeader className="pb-3"><CardTitle className="text-sm">Project Information</CardTitle></CardHeader>
               <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
                 <div><Label className="text-xs text-muted-foreground">Name</Label><p className="font-medium">{caseData.patient_name}</p></div>
                 <div><Label className="text-xs text-muted-foreground">Age</Label><p className="font-medium">{caseData.patient_age || '—'}</p></div>
