@@ -181,11 +181,11 @@ export default function CaseSubmission() {
   useEffect(() => {
     if (!formData.request_type || formData.request_type === 'Other') return;
     if (formData.request_type === lastSyncedRequestType.current) return;
-    if (presets.length === 0) return;
+    if (!presetsReady) return;
     lastSyncedRequestType.current = formData.request_type;
     setSelectedRequestTypes(prev => {
       if (prev.some(rt => rt.name === formData.request_type)) return prev;
-      const preset = presets.find(p => p.category === 'request_type' && p.name === formData.request_type);
+      const preset = presetsRef.current.find(p => p.category === 'request_type' && p.name === formData.request_type);
       return [...prev, createRequestTypeItem(
         formData.request_type,
         preset?.id || '',
@@ -193,7 +193,7 @@ export default function CaseSubmission() {
         preset?.fee_usd || preset?.unit_price || 0,
       )];
     });
-  }, [formData.request_type, presets]);
+  }, [formData.request_type, presetsReady]);
 
   // Patient search (RBAC-scoped) — show dropdown on focus, filter as user types
   useEffect(() => {
