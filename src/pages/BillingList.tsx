@@ -138,7 +138,7 @@ export default function BillingList() {
   };
 
   const exportCSV = () => {
-    const headers = ['Invoice #', 'Patient', 'Amount', 'Balance', 'Status', 'Date', 'Due'];
+    const headers = ['Invoice #', 'Project', 'Amount', 'Balance', 'Status', 'Date', 'Due'];
     const rows = filtered.map(i => [i.invoice_number || '', i.patient_name, i.amount_usd.toFixed(2), (i.balance_due || 0).toFixed(2), i.status, format(new Date(i.created_at), 'yyyy-MM-dd'), i.due_date || '']);
     const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
