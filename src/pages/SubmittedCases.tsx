@@ -216,7 +216,7 @@ export default function SubmittedCases() {
                     </div>
                     {(c as any).patient_id && (
                       <Badge variant="outline" className="text-[10px] mt-1 cursor-pointer hover:bg-accent" onClick={(e) => { e.stopPropagation(); openPreview('patient', (c as any).patient_id); }}>
-                        👤 Linked Patient
+                        👤 Linked Project
                       </Badge>
                     )}
                   </div>
