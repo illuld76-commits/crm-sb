@@ -176,7 +176,7 @@ export default function Dashboard() {
         // Soft delete (archive)
         const { error } = await supabase.from('patients').update({ archived_at: new Date().toISOString() }).eq('id', deleteTarget.id);
         if (error) { toast.error('Failed to archive'); return; }
-        toast.success('Case archived');
+        toast.success('Project archived');
       } else {
         // Direct delete for non-published
         const { error } = await supabase.from('patients').delete().eq('id', deleteTarget.id);
