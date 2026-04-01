@@ -90,85 +90,92 @@ export default function CaseSubmission() {
     });
   };
 
+  // Effect 1: Load presets and settings entities (run ONCE on mount)
   useEffect(() => {
     supabase.from('presets').select('*').order('name').then(({ data }) => {
-      setPresets((data || []) as unknown as Preset[]);
+      const p = (data || []) as unknown as Preset[];
+      presetsRef.current = p;
+      setPresets(p);
+      setPresetsReady(true);
     });
     supabase.from('settings_entities').select('entity_name, entity_type').eq('is_deleted', false).order('entity_name').then(({ data }) => {
       setSettingsEntities(data || []);
     });
+  }, []);
 
-    // Auto-fill for single-assignment non-admin users
-    if (!isAdmin && allowedClinics && allowedClinics.length === 1 && !id) {
-      setFormData(prev => ({ ...prev, clinic_name: allowedClinics[0] }));
-    }
-    if (!isAdmin && allowedDoctors && allowedDoctors.length === 1 && !id) {
-      setFormData(prev => ({ ...prev, doctor_name: allowedDoctors[0] }));
-    }
-    if (!isAdmin && allowedLabs && allowedLabs.length === 1 && !id) {
-      setFormData(prev => ({ ...prev, lab_name: allowedLabs[0] }));
-    }
-    if (!isAdmin && allowedCompanies && allowedCompanies.length === 1 && !id) {
-      setFormData(prev => ({ ...prev, company_name: allowedCompanies[0] }));
-    }
+  // Effect 2: Auto-fill for single-assignment non-admin users (run once when scope loads)
+  useEffect(() => {
+    if (scopeLoading || isAdmin || id || autoFilledScope.current) return;
+    autoFilledScope.current = true;
+    setFormData(prev => {
+      const updates: Partial<typeof prev> = {};
+      if (allowedClinics && allowedClinics.length === 1) updates.clinic_name = allowedClinics[0];
+      if (allowedDoctors && allowedDoctors.length === 1) updates.doctor_name = allowedDoctors[0];
+      if (allowedLabs && allowedLabs.length === 1) updates.lab_name = allowedLabs[0];
+      if (allowedCompanies && allowedCompanies.length === 1) updates.company_name = allowedCompanies[0];
+      if (Object.keys(updates).length === 0) return prev;
+      return { ...prev, ...updates };
+    });
+  }, [scopeLoading, isAdmin, id, allowedClinics, allowedDoctors, allowedLabs, allowedCompanies]);
 
-    if (id && id !== loadedCaseId.current) {
-      loadedCaseId.current = id;
-      supabase.from('case_requests').select('*').eq('id', id).single().then(({ data }) => {
-        if (data) {
-          const typed = data as unknown as CaseRequest;
-          const savedDynamic = ((typed.dynamic_data || {}) as Record<string, any>);
-          const savedWorkOrderForms = savedDynamic.work_order_forms && typeof savedDynamic.work_order_forms === 'object'
-            ? savedDynamic.work_order_forms as Record<string, Record<string, any>>
-            : null;
-          const legacyDynamic = { ...savedDynamic };
-          delete legacyDynamic.work_order_forms;
-          const legacyToothChart = Array.isArray(legacyDynamic.tooth_chart) ? legacyDynamic.tooth_chart : undefined;
-          delete legacyDynamic.tooth_chart;
-          delete legacyDynamic.company_name;
+  // Effect 3: Load existing case data (run once per case ID)
+  useEffect(() => {
+    if (!id || id === loadedCaseId.current) return;
+    loadedCaseId.current = id;
+    supabase.from('case_requests').select('*').eq('id', id).single().then(({ data }) => {
+      if (data) {
+        const typed = data as unknown as CaseRequest;
+        const savedDynamic = ((typed.dynamic_data || {}) as Record<string, any>);
+        const savedWorkOrderForms = savedDynamic.work_order_forms && typeof savedDynamic.work_order_forms === 'object'
+          ? savedDynamic.work_order_forms as Record<string, Record<string, any>>
+          : null;
+        const legacyDynamic = { ...savedDynamic };
+        delete legacyDynamic.work_order_forms;
+        const legacyToothChart = Array.isArray(legacyDynamic.tooth_chart) ? legacyDynamic.tooth_chart : undefined;
+        delete legacyDynamic.tooth_chart;
+        delete legacyDynamic.company_name;
 
-          setCaseData(typed);
-          setFormData({
-            patient_name: data.patient_name || '', patient_age: data.patient_age?.toString() || '',
-            patient_sex: data.patient_sex || 'male', request_type: data.request_type || '',
-            request_name: (data as any).request_name || '',
-            notes: data.notes || '', status: data.status || 'draft',
-            clinic_name: data.clinic_name || '', doctor_name: data.doctor_name || '', lab_name: data.lab_name || '',
-            company_name: savedDynamic.company_name || '',
-          });
-          setExistingAttachments((data.attachments as unknown as FileAttachment[]) || []);
-          setSelectedPatientId(data.patient_id || null);
-          // Also sync the ref so auto-sync effect doesn't re-add
-          lastSyncedRequestType.current = data.request_type || '';
-          const savedItems = (((data as any).request_items as any[]) || []).map((item: any) => createRequestTypeItem(
-            item.request_type || '',
-            item.preset_id || '',
-            item.qty || 1,
-            item.rate || 0,
-          ));
-          if (savedItems.length > 0) {
-            setSelectedRequestTypes(savedItems);
-          } else if (data.request_type) {
-            const preset = presets.find(p => p.category === 'request_type' && p.name === data.request_type);
-            setSelectedRequestTypes([createRequestTypeItem(data.request_type, preset?.id || '', 1, preset?.fee_usd || preset?.unit_price || 0)]);
-          }
-          if (savedWorkOrderForms) {
-            setDynamicFormData(savedWorkOrderForms);
-          } else if (Object.keys(legacyDynamic).length > 0 || legacyToothChart) {
-            setDynamicFormData({
-              main: {
-                ...legacyDynamic,
-                ...(legacyToothChart ? { tooth_chart: legacyToothChart } : {}),
-              },
-            });
-          }
-          if (data.status !== 'draft') {
-            setIsViewMode(true);
-          }
+        setCaseData(typed);
+        setFormData({
+          patient_name: data.patient_name || '', patient_age: data.patient_age?.toString() || '',
+          patient_sex: data.patient_sex || 'male', request_type: data.request_type || '',
+          request_name: (data as any).request_name || '',
+          notes: data.notes || '', status: data.status || 'draft',
+          clinic_name: data.clinic_name || '', doctor_name: data.doctor_name || '', lab_name: data.lab_name || '',
+          company_name: savedDynamic.company_name || '',
+        });
+        setExistingAttachments((data.attachments as unknown as FileAttachment[]) || []);
+        setSelectedPatientId(data.patient_id || null);
+        lastSyncedRequestType.current = data.request_type || '';
+        const currentPresets = presetsRef.current;
+        const savedItems = (((data as any).request_items as any[]) || []).map((item: any) => createRequestTypeItem(
+          item.request_type || '',
+          item.preset_id || '',
+          item.qty || 1,
+          item.rate || 0,
+        ));
+        if (savedItems.length > 0) {
+          setSelectedRequestTypes(savedItems);
+        } else if (data.request_type) {
+          const preset = currentPresets.find(p => p.category === 'request_type' && p.name === data.request_type);
+          setSelectedRequestTypes([createRequestTypeItem(data.request_type, preset?.id || '', 1, preset?.fee_usd || preset?.unit_price || 0)]);
         }
-      });
-    }
-  }, [allowedClinics, allowedCompanies, allowedDoctors, allowedLabs, id, isAdmin]);
+        if (savedWorkOrderForms) {
+          setDynamicFormData(savedWorkOrderForms);
+        } else if (Object.keys(legacyDynamic).length > 0 || legacyToothChart) {
+          setDynamicFormData({
+            main: {
+              ...legacyDynamic,
+              ...(legacyToothChart ? { tooth_chart: legacyToothChart } : {}),
+            },
+          });
+        }
+        if (data.status !== 'draft') {
+          setIsViewMode(true);
+        }
+      }
+    });
+  }, [id]);
 
   // Auto-sync: when request_type changes, add it to selectedRequestTypes (guarded by ref to prevent flicker)
   useEffect(() => {
