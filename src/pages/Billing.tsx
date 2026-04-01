@@ -150,10 +150,10 @@ export default function Billing() {
     });
     // Load profiles — admin sees all, non-admin sees company peers
     if (isAdmin) {
-      supabase.from('profiles').select('user_id, display_name').then(({ data }) => setAllProfiles(data || []));
+      supabase.from('profiles').select('user_id, display_name, email').then(({ data }) => setAllProfiles(data || []));
     } else if (user) {
       getCompanyPeers(user.id).then(peerIds => {
-        supabase.from('profiles').select('user_id, display_name').then(({ data }) => {
+        supabase.from('profiles').select('user_id, display_name, email').then(({ data }) => {
           setAllProfiles((data || []).filter(p => peerIds.includes(p.user_id)));
         });
       });
