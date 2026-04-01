@@ -255,7 +255,7 @@ export default function GlobalKanban() {
     const { error } = await supabase.from('case_requests').update({ status: newStatus }).eq('id', id);
     if (!error) {
       setCaseRequests(prev => prev.map(c => c.id === id ? { ...c, status: newStatus } : c));
-      toast.success(`Case ${newStatus.replace('_', ' ')}`);
+      toast.success(`Request ${newStatus.replace('_', ' ')}`);
     }
   };
 

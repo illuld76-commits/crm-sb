@@ -278,7 +278,7 @@ export default function GlobalAssets() {
                 <CardContent className="p-3 space-y-1">
                   <p className="text-xs font-medium truncate">{asset.original_name || asset.category}</p>
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-muted-foreground">{asset.patient_name}</span>
+                    <span className="text-[10px] text-muted-foreground">{asset.patient_name} (Project)</span>
                     <Badge variant="outline" className="text-[9px]">{asset.category}</Badge>
                   </div>
                   <div className="flex flex-wrap gap-1">

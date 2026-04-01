@@ -163,7 +163,13 @@ export default function Billing() {
     const prefillPatientId = searchParams.get('patientId');
     const prefillPatientName = searchParams.get('patientName');
     const prefillPhaseId = searchParams.get('phaseId');
-    if (prefillPatientId) setPatientId(prefillPatientId);
+    if (prefillPatientId) {
+      setPatientId(prefillPatientId);
+      supabase.from('phases').select('id, phase_name').eq('patient_id', prefillPatientId)
+        .eq('is_deleted', false).order('phase_order').then(({ data }) => {
+          setPatientPhases(data || []);
+        });
+    }
     if (prefillPatientName) {
       setPatientName(prefillPatientName);
       setClientDetails(prev => ({ ...prev, name: prefillPatientName }));
