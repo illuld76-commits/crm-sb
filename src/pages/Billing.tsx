@@ -553,6 +553,12 @@ export default function Billing() {
             <span className="text-yellow-800 dark:text-yellow-400 font-medium">This invoice is locked (paid with receipts). It cannot be edited.</span>
           </div>
         )}
+        {!isAdmin && !isNew && status !== 'draft' && (
+          <div className="flex items-center gap-2 p-3 mb-4 rounded-lg bg-blue-100 dark:bg-blue-900/20 border border-blue-300 dark:border-blue-700 text-sm">
+            <AlertTriangle className="w-4 h-4 text-blue-600" />
+            <span className="text-blue-800 dark:text-blue-400 font-medium">View Only — This invoice is not in draft status. Contact an admin to make changes.</span>
+          </div>
+        )}
 
         {/* Top action bar */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
