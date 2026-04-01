@@ -181,7 +181,7 @@ export default function Dashboard() {
         // Direct delete for non-published
         const { error } = await supabase.from('patients').delete().eq('id', deleteTarget.id);
         if (error) { toast.error('Failed to delete'); return; }
-        toast.success('Case deleted');
+        toast.success('Project deleted');
       }
     }
 
