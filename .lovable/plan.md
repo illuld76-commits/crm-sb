@@ -1,41 +1,35 @@
 
 
-# Fix Flickering Dropdowns & Cross-Module Audit
+# Fix Request Items Dropdown Flickering & Outstanding Issues
 
-## Root Cause: Flickering Request Items Dropdown
+## Problem 1: Request Items Dropdown Flickering (CRITICAL)
 
-**Line 165-177 in CaseSubmission.tsx**: The `useEffect` that auto-syncs `formData.request_type` into `selectedRequestTypes` has `selectedRequestTypes` in its dependency array. Every time a user changes a request item dropdown value, `setSelectedRequestTypes` fires → the effect re-runs → it checks and potentially modifies `selectedRequestTypes` again → re-render loop causing flicker.
+**Root cause identified from video and code analysis:**
 
-**Fix**: Remove `selectedRequestTypes` from the dependency array. Use a ref or functional check inside the effect to avoid the loop.
+The `useEffect` at line 165-177 depends on `presets`, which loads asynchronously (line 88). The sequence is:
+1. Component mounts → `presets` is `[]`
+2. User interacts with request item dropdowns
+3. Presets finish loading → `setPresets(data)` triggers re-render
+4. The auto-sync effect re-runs because `presets` changed
+5. This calls `setSelectedRequestTypes(prev => ...)` — even if it returns `prev` unchanged, React schedules a state update check
+6. The Select dropdown loses focus / re-renders = **flicker**
 
-## All Issues to Fix
+Additionally, the `createRequestTypeItem` function (line 60) generates a new `crypto.randomUUID()` every time it's called. If the auto-sync effect ever adds a new item, it creates a brand-new ID, causing React to unmount/remount that item's DOM.
 
-### 1. CaseSubmission — Flickering Request Type/Items Dropdowns
-- **Line 177**: Remove `selectedRequestTypes` from useEffect deps
-- Use `setSelectedRequestTypes(prev => ...)` with a functional update that checks if the item already exists inside the updater, avoiding the dependency entirely
+**Fix:**
+- Split preset loading into its own stable `useEffect` with a `presetsLoaded` ref
+- Guard the auto-sync effect so it only runs ONCE per `request_type` change using a ref to track the last synced value
+- This eliminates the re-render loop entirely
 
-### 2. CaseSubmission — Request Type auto-add creates duplicates
-- The same useEffect (line 165-177) can add duplicates because `selectedRequestTypes.some(rt => rt.name === formData.request_type)` runs with stale closure when the effect re-triggers
-- Fix: Use functional `setSelectedRequestTypes(prev => { if (prev.some(...)) return prev; return [...prev, newItem]; })`
-
-### 3. Dashboard Terminology — Remaining "Case" Labels
-- `Dashboard.tsx` still has "All Cases", "Case archived", "Case deleted" etc.
-- Replace with "Project" terminology
-
-### 4. Billing — Phase fetch on prefill from query params
-- When `prefillPatientId` is set via query params (line 163-171), phases are NOT fetched. Only `selectPatient()` and existing invoice load paths fetch phases.
-- Fix: After setting prefill patient, also fetch phases
-
-### 5. GlobalKanban / WorkOrderDetail / Messages / GlobalAssets — Terminology
-- Remaining "Patient" references in UI labels need "Project" replacement
-
-## Implementation Plan
-
-### Step 1: Fix CaseSubmission flickering (CRITICAL)
-In the useEffect at line 165-177, change to:
 ```typescript
+const lastSyncedRequestType = useRef('');
+
 useEffect(() => {
   if (!formData.request_type || formData.request_type === 'Other') return;
+  if (formData.request_type === lastSyncedRequestType.current) return;
+  if (presets.length === 0) return; // Wait for presets to load
+  
+  lastSyncedRequestType.current = formData.request_type;
   setSelectedRequestTypes(prev => {
     if (prev.some(rt => rt.name === formData.request_type)) return prev;
     const preset = presets.find(p => p.category === 'request_type' && p.name === formData.request_type);
@@ -47,36 +41,34 @@ useEffect(() => {
     )];
   });
 }, [formData.request_type, presets]);
-// REMOVED selectedRequestTypes from deps — functional update handles it
 ```
 
-### Step 2: Dashboard terminology
-Replace "Case"/"Cases" with "Project"/"Projects" in visible UI strings in `Dashboard.tsx`.
+## Problem 2: Auth Lock Warning (Console Spam)
 
-### Step 3: Billing prefill phase fetch
-After setting `prefillPatientId` (line 166), also fetch phases:
-```typescript
-if (prefillPatientId) {
-  setPatientId(prefillPatientId);
-  supabase.from('phases').select('id, phase_name').eq('patient_id', prefillPatientId)
-    .eq('is_deleted', false).order('phase_order').then(({ data }) => {
-      setPatientPhases(data || []);
-    });
-}
-```
+The console shows repeated "Lock not released within 5000ms" warnings from Supabase auth. This is a known React Strict Mode issue. 
 
-### Step 4: Remaining terminology cleanup
-Quick pass through `GlobalKanban.tsx`, `WorkOrderDetail.tsx`, `Messages.tsx`, `GlobalAssets.tsx` — replace user-visible "Patient" labels with "Project".
+**Fix:** No code change needed — this is a development-only warning that doesn't affect production. The lock recovery mechanism works correctly.
+
+## Problem 3: Previously Requested Items Still Pending
+
+From the conversation history, these items were requested but may still need verification:
+
+| Item | Status |
+|------|--------|
+| Entity dropdowns scoped by user assignments | Done (last edit) |
+| Dashboard terminology Case → Project | Done |
+| Billing email auto-population | Done |
+| Billing phase suggestion | Done |
+| Forgot password link | Done |
+| Expenses RBAC | Done |
+| Billing view-only for non-admin | Done |
+| WorkOrderDetail/GlobalKanban/GlobalAssets terminology | Done |
+
+No additional missing features identified beyond the flickering fix.
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/pages/CaseSubmission.tsx` | Fix flickering: remove `selectedRequestTypes` from useEffect deps, use functional update |
-| `src/pages/Dashboard.tsx` | Terminology: Case → Project |
-| `src/pages/Billing.tsx` | Fetch phases on prefill from query params |
-| `src/pages/GlobalKanban.tsx` | Terminology cleanup |
-| `src/pages/WorkOrderDetail.tsx` | Terminology cleanup |
-| `src/pages/Messages.tsx` | Terminology cleanup |
-| `src/pages/GlobalAssets.tsx` | Terminology cleanup |
+| `src/pages/CaseSubmission.tsx` | Add `useRef` import, add `lastSyncedRequestType` ref, guard auto-sync effect to prevent re-runs |
 
