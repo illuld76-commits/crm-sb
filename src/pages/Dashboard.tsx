@@ -726,7 +726,7 @@ export default function Dashboard() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {isPermanentDelete ? 'Permanently Delete Case' : targetHasPublished ? 'Archive Published Case' : 'Delete Case'}
+              {isPermanentDelete ? 'Permanently Delete Project' : targetHasPublished ? 'Archive Published Project' : 'Delete Project'}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {isPermanentDelete ? (

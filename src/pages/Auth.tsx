@@ -81,6 +81,20 @@ export default function Auth() {
                 <Button type="submit" className="w-full dental-gradient" disabled={loading}>
                   {loading ? 'Please wait...' : 'Sign In'}
                 </Button>
+                <button
+                  type="button"
+                  className="w-full text-xs text-muted-foreground hover:text-primary hover:underline mt-1"
+                  onClick={async () => {
+                    if (!email) { toast.error('Enter your email first'); return; }
+                    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                      redirectTo: `${window.location.origin}/profile`,
+                    });
+                    if (error) toast.error(error.message);
+                    else toast.success('Password reset email sent! Check your inbox.');
+                  }}
+                >
+                  Forgot Password?
+                </button>
               </form>
             ) : (
               <form onSubmit={handleSignUp} className="space-y-4">

@@ -682,9 +682,11 @@ export default function CaseSubmission() {
                   onFocus={() => setPatientSearchFocused(true)}
                   onBlur={() => setTimeout(() => setPatientSearchFocused(false), 200)}
                 />
-                {patientSearchFocused && patientResults.length >= 0 && (
+                {patientSearchFocused && (
                   <div className="absolute z-10 w-full mt-1 bg-popover border rounded-md shadow-md max-h-48 overflow-y-auto">
-                    {patientResults.length > 0 ? patientResults.map(p => (
+                    {patientSearching ? (
+                      <div className="px-3 py-2 text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="w-3 h-3 animate-spin" /> Loading...</div>
+                    ) : patientResults.length > 0 ? patientResults.map(p => (
                       <div key={p.id} className="px-3 py-2 text-sm hover:bg-accent cursor-pointer" onClick={() => selectExistingPatient(p)}>
                         <span className="font-medium">{p.patient_name}</span>
                           {p.patient_id_label && <span className="text-muted-foreground text-xs"> • {p.patient_id_label}</span>}
