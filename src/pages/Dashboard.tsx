@@ -611,7 +611,7 @@ export default function Dashboard() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-muted/50 border-b border-border">
-                        <th className="text-left py-2 px-3 font-medium text-muted-foreground">Case</th>
+                        <th className="text-left py-2 px-3 font-medium text-muted-foreground">Project</th>
                         <th className="text-left py-2 px-3 font-medium text-muted-foreground hidden md:table-cell">Doctor</th>
                         <th className="text-left py-2 px-3 font-medium text-muted-foreground hidden lg:table-cell">Clinic</th>
                         <th className="text-left py-2 px-3 font-medium text-muted-foreground hidden lg:table-cell">Lab</th>
