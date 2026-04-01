@@ -163,7 +163,6 @@ export default function CaseSubmission() {
   }, [allowedClinics, allowedCompanies, allowedDoctors, allowedLabs, id, isAdmin]);
 
   // Auto-sync: when request_type changes, add it to selectedRequestTypes (guarded by ref to prevent flicker)
-  const lastSyncedRequestType = useRef('');
   useEffect(() => {
     if (!formData.request_type || formData.request_type === 'Other') return;
     if (formData.request_type === lastSyncedRequestType.current) return;
