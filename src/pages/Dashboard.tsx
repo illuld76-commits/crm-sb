@@ -586,11 +586,11 @@ export default function Dashboard() {
           <Card className="p-12 text-center">
             <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
             <p className="text-muted-foreground">
-              {activeTab === 'archived'
-                ? 'No archived cases.'
+               {activeTab === 'archived'
+                ? 'No archived projects.'
                 : patients.length === 0
-                  ? 'No cases yet. Add your first case!'
-                  : 'No cases match your search.'}
+                  ? 'No projects yet. Add your first project!'
+                  : 'No projects match your search.'}
             </p>
           </Card>
         ) : (
