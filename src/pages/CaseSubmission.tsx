@@ -159,7 +159,7 @@ export default function CaseSubmission() {
         }
       });
     }
-  }, [allowedClinics, allowedCompanies, allowedDoctors, allowedLabs, id, isAdmin, presets]);
+  }, [allowedClinics, allowedCompanies, allowedDoctors, allowedLabs, id, isAdmin]);
 
   // Auto-sync: when request_type changes, add it to selectedRequestTypes if not already there
   useEffect(() => {
