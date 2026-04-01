@@ -102,7 +102,7 @@ export default function BottomNav() {
               onClick={() => { setNewSheetOpen(false); navigate('/patient/new'); }}
             >
               <LayoutGrid className="h-6 w-6 text-primary" />
-              <span className="text-xs font-medium">New Patient</span>
+              <span className="text-xs font-medium">New Project</span>
             </Button>
             <Button
               variant="outline"

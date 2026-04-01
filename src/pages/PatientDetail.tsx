@@ -648,8 +648,8 @@ export default function PatientDetail() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Patient Name *</Label><Input value={patientName} onChange={(e) => setPatientName(e.target.value)} placeholder="John Doe" /></div>
-                <div className="space-y-2"><Label>Patient ID / Label</Label><Input value={patientIdLabel} onChange={(e) => setPatientIdLabel(e.target.value)} placeholder="PAT-001" /></div>
+                <div className="space-y-2"><Label>Project Name *</Label><Input value={patientName} onChange={(e) => setPatientName(e.target.value)} placeholder="John Doe" /></div>
+                <div className="space-y-2"><Label>Project ID / Label</Label><Input value={patientIdLabel} onChange={(e) => setPatientIdLabel(e.target.value)} placeholder="PAT-001" /></div>
                 <div className="space-y-2"><Label>Age</Label><Input type="number" value={patientAge} onChange={(e) => setPatientAge(e.target.value)} placeholder="25" /></div>
                 <div className="space-y-2"><Label>Sex</Label><Select value={patientSex} onValueChange={setPatientSex}><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger><SelectContent><SelectItem value="M">Male</SelectItem><SelectItem value="F">Female</SelectItem><SelectItem value="Other">Other</SelectItem></SelectContent></Select></div>
                 {renderEntitySelect('Doctor', doctorName, setDoctorName, doctorEntities, 'Select doctor...')}
