@@ -431,7 +431,7 @@ export default function Dashboard() {
                 <LayoutGrid className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Active Cases</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Active Projects</p>
                 <p className="text-lg font-bold">{activePatients.length}</p>
               </div>
             </CardContent>
