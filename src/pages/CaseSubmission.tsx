@@ -60,6 +60,8 @@ export default function CaseSubmission() {
   const lastSyncedRequestType = useRef('');
   const itemIdCounter = useRef(0);
   const loadedCaseId = useRef<string | null>(null);
+  const autoFilledScope = useRef(false);
+  const presetsRef = useRef<Preset[]>([]);
 
   const createRequestTypeItem = (name = '', presetId = '', qty = 1, fee = 0) => ({
     id: `rt-${name}-${itemIdCounter.current++}`,
