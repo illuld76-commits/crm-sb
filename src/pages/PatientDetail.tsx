@@ -546,13 +546,10 @@ export default function PatientDetail() {
   const labEntitiesAll = settingsEntities.filter((e) => e.entity_type === 'lab');
   const companyEntities = settingsEntities.filter((e) => e.entity_type === 'company');
 
-  // Apply RBAC scoping for non-admin
-  const doctorEntities = scopeFilterEntities(settingsEntities, 'doctor').length > 0
-    ? scopeFilterEntities(settingsEntities, 'doctor') : doctorEntitiesAll;
-  const clinicEntities = scopeFilterEntities(settingsEntities, 'clinic').length > 0
-    ? scopeFilterEntities(settingsEntities, 'clinic') : clinicEntitiesAll;
-  const labEntities = scopeFilterEntities(settingsEntities, 'lab').length > 0
-    ? scopeFilterEntities(settingsEntities, 'lab') : labEntitiesAll;
+  // For admin: show all settings_entities; for non-admin: show from assignments
+  const doctorEntities = isAdmin ? doctorEntitiesAll : scopeFilterEntities(settingsEntities, 'doctor');
+  const clinicEntities = isAdmin ? clinicEntitiesAll : scopeFilterEntities(settingsEntities, 'clinic');
+  const labEntities = isAdmin ? labEntitiesAll : scopeFilterEntities(settingsEntities, 'lab');
 
   const renderFeasibilityCard = (data: any, caption: string | null) => {
     if (!data) return null;
