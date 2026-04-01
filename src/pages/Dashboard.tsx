@@ -464,7 +464,7 @@ export default function Dashboard() {
                 <Columns3 className="w-5 h-5 text-destructive" />
               </div>
               <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Due This Week</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Active Cases</p>
                 <p className="text-lg font-bold">{dueThisWeekCount}</p>
               </div>
             </CardContent>
