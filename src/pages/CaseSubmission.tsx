@@ -32,6 +32,7 @@ export default function CaseSubmission() {
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [presets, setPresets] = useState<Preset[]>([]);
+  const [presetsReady, setPresetsReady] = useState(false);
   const [caseData, setCaseData] = useState<CaseRequest | null>(null);
   const [isViewMode, setIsViewMode] = useState(false);
   const [formData, setFormData] = useState({
