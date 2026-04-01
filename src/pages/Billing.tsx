@@ -175,7 +175,7 @@ export default function Billing() {
         supabase.from('invoices').select('*').eq('id', invoiceId).single(),
         supabase.from('receipts').select('*').eq('invoice_id', invoiceId).order('payment_date'),
         supabase.from('expenses').select('*').eq('invoice_id', invoiceId).eq('is_deleted', false).order('created_at'),
-      ]).then(([{ data: inv }, { data: recs }, { data: exps }]) => {
+      ]).then(async ([{ data: inv }, { data: recs }, { data: exps }]) => {
         if (inv) {
           setStatus(inv.status);
           setPatientName(inv.patient_name);
@@ -201,8 +201,11 @@ export default function Billing() {
         if (inv?.patient_id) {
           const { data: phasesData } = await supabase.from('phases').select('id, phase_name').eq('patient_id', inv.patient_id).eq('is_deleted', false).order('phase_order');
           setPatientPhases(phasesData || []);
-          const { data: plansData } = await supabase.from('treatment_plans').select('id, plan_name, phase_id').in('phase_id', (phasesData || []).map(d => d.id));
-          setPatientPlans((plansData || []) as any);
+          const phaseIds = (phasesData || []).map(d => d.id);
+          if (phaseIds.length > 0) {
+            const { data: plansData } = await supabase.from('treatment_plans').select('id, plan_name, phase_id').in('phase_id', phaseIds);
+            setPatientPlans((plansData || []) as any);
+          }
         }
         setLoading(false);
       });
