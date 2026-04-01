@@ -178,7 +178,8 @@ export default function CaseSubmission() {
 
   // Patient search (RBAC-scoped) — show dropdown on focus, filter as user types
   useEffect(() => {
-    if (!patientSearchFocused) { setPatientResults([]); return; }
+    if (!patientSearchFocused) { setPatientResults([]); setPatientSearching(false); return; }
+    setPatientSearching(true);
     const t = setTimeout(async () => {
       let query = supabase.from('patients').select('id, patient_name, patient_id_label, doctor_name, clinic_name, lab_name, company_name, user_id, primary_user_id, secondary_user_id');
       if (patientSearch.length >= 1) {
@@ -187,6 +188,7 @@ export default function CaseSubmission() {
       const { data } = await query.limit(20);
       const results = (data || []).filter(p => canAccessPatient(p));
       setPatientResults(results.slice(0, 10));
+      setPatientSearching(false);
     }, 200);
     return () => clearTimeout(t);
   }, [patientSearch, patientSearchFocused, canAccessPatient]);
