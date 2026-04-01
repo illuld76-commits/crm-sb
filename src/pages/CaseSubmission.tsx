@@ -57,9 +57,11 @@ export default function CaseSubmission() {
   // Settings entities for dropdowns
   const [settingsEntities, setSettingsEntities] = useState<{ entity_name: string; entity_type: string }[]>([]);
   const lastSyncedRequestType = useRef('');
+  const itemIdCounter = useRef(0);
+  const loadedCaseId = useRef<string | null>(null);
 
   const createRequestTypeItem = (name = '', presetId = '', qty = 1, fee = 0) => ({
-    id: crypto.randomUUID(),
+    id: `rt-${name}-${itemIdCounter.current++}`,
     presetId,
     name,
     qty,
@@ -107,7 +109,8 @@ export default function CaseSubmission() {
       setFormData(prev => ({ ...prev, company_name: allowedCompanies[0] }));
     }
 
-    if (id) {
+    if (id && id !== loadedCaseId.current) {
+      loadedCaseId.current = id;
       supabase.from('case_requests').select('*').eq('id', id).single().then(({ data }) => {
         if (data) {
           const typed = data as unknown as CaseRequest;
@@ -132,6 +135,8 @@ export default function CaseSubmission() {
           });
           setExistingAttachments((data.attachments as unknown as FileAttachment[]) || []);
           setSelectedPatientId(data.patient_id || null);
+          // Also sync the ref so auto-sync effect doesn't re-add
+          lastSyncedRequestType.current = data.request_type || '';
           const savedItems = (((data as any).request_items as any[]) || []).map((item: any) => createRequestTypeItem(
             item.request_type || '',
             item.preset_id || '',
@@ -141,7 +146,7 @@ export default function CaseSubmission() {
           if (savedItems.length > 0) {
             setSelectedRequestTypes(savedItems);
           } else if (data.request_type) {
-            const preset = (typed as any)?.request_type ? presets.find(p => p.category === 'request_type' && p.name === data.request_type) : null;
+            const preset = presets.find(p => p.category === 'request_type' && p.name === data.request_type);
             setSelectedRequestTypes([createRequestTypeItem(data.request_type, preset?.id || '', 1, preset?.fee_usd || preset?.unit_price || 0)]);
           }
           if (savedWorkOrderForms) {
