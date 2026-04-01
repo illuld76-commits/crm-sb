@@ -170,8 +170,13 @@ export async function convertCaseToProject(
       lab_name: caseReq.lab_name,
     });
 
-    // Auto-populate CRM details
-    let clientDetails: any = { name: crm.client?.name || caseReq.patient_name, email: crm.client?.email || '', address: crm.client?.address || '' };
+    // Auto-populate CRM details with primary user email fallback
+    let clientEmail = crm.client?.email || '';
+    if (!clientEmail && crm.primaryUserId) {
+      const { data: puProfile } = await supabase.from('profiles').select('email').eq('user_id', crm.primaryUserId).single();
+      if (puProfile?.email) clientEmail = puProfile.email;
+    }
+    let clientDetails: any = { name: crm.client?.name || caseReq.patient_name, email: clientEmail, address: crm.client?.address || '' };
     let merchantDetails: any = { name: '', email: '', address: '', bank_details: '' };
     let gstNumber = crm.client?.gstNumber || '';
     let placeOfSupply = crm.client?.state || '';
