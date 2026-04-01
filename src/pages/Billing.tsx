@@ -403,7 +403,7 @@ export default function Billing() {
   };
 
   const saveInvoice = async (newStatus?: string) => {
-    if (!user || !patientName) { toast.error('Patient name required'); return; }
+    if (!user || !patientName) { toast.error('Project name required'); return; }
     if (!isAdmin && isNew) { toast.error('Only admin can create invoices'); return; }
     if (!isAdmin && !isNew && status !== 'draft') { toast.error('Only admin can edit non-draft invoices'); return; }
     if (!placeOfSupply) { toast.error('Place of Supply is required'); return; }
