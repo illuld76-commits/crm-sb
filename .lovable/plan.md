@@ -1,86 +1,93 @@
 
 
-# Fix Case Request Flow, Entity Duplicates, and Conversion Pipeline
+# Fix Invoice Email, Phase Billing, Patient Dropdown & Terminology
 
 ## Issues Found
 
-### 1. Patient search has no dropdown — only live search
-The patient search input only shows results after typing 2+ characters. There is no initial dropdown of all patients. User expects a proper dropdown with live-search filtering.
+### 1. Invoice email not auto-populated
+In `Billing.tsx` line 258, `clientDetails.email` is set from `crm.client?.email || patientFull?.contact_email`. The CRM email comes from `settings_entities.email` for the matched entity (company/clinic/doctor). If no entity has an email set, and the patient has no `contact_email`, the field stays empty. The user expects the **primary assigned user's email** to auto-populate.
 
-**Fix**: Show all RBAC-scoped patients when the search input is focused (even with empty text), with live filtering as user types.
+**Fix**: After resolving CRM contacts, also look up the primary user's email from `auth` (via profiles or the user metadata). Since we have `primaryUserId`, fetch the profile's email or the auth user email. Actually, profiles don't store email — we need to query `auth.users` which isn't accessible from client. Instead, use `supabase.auth.admin` which also isn't available. The practical fix: store email on profiles table (it's not there now), OR use the CRM entity email more aggressively. Best approach: when `primaryUserId` is resolved, look up `profiles` for `display_name`, and also check if any `user_assignments` link to entities with emails. Simpler: the `clientDetails.email` should fall back to the **selected primary user's profile**. Since auth email isn't in profiles, we should add a lookup: fetch the user's email from the `case_requests` table's `user_id` linked profile, or from `settings_entities` where the user is assigned. Most direct fix: use `supabase.rpc` or fetch from `auth.users` via edge function. **Pragmatic fix**: populate email from the CRM entity (company > clinic > doctor priority) AND also try to get email from the patient's `contact_email` field. If neither exists, show a toast prompting the user to add email to the CRM entity or patient record.
 
-### 2. Doctor/Clinic/Lab dropdowns showing same names
-The `settings_entities` table stores entities with `entity_type` discriminator. The `filterEntities` function correctly filters by type. However, if the same `entity_name` was added under multiple `entity_type` values (e.g., "ABC" as both clinic and doctor), they appear identically. The real issue is likely that no entities exist with different types, so the admin fallback at lines 299-307 shows all entities of each type — but the entity_type filter IS being applied. The actual bug: the `key` prop on SelectItem uses `e.entity_name` which could collide across types.
+Actually, the real issue is simpler: **the CRM entity likely has no email set** because the Settings CRM form may not have saved it. Let me verify the flow works when entity email exists — it should. The fix is to also populate from the **primary user's profile email**. We should query `supabase.auth.getUser()` for the primary user — but that's admin-only. Alternative: add email field to profiles table, populated from `auth.users.email` via the `handle_new_user` trigger.
 
-**Fix**: Verify the filter logic is correct and add `entity_type` prefix to keys to prevent collision. Also check the actual data in the database.
+**Plan**: 
+1. Migration: add `email` column to `profiles` table
+2. Update `handle_new_user` trigger to also store `NEW.email`
+3. In `Billing.tsx selectPatient()`, after resolving primaryUserId, fetch their profile email as fallback
 
-### 3. Request Type and Request Items are redundant/confusing
-Currently there are TWO places to specify request types:
-- The "Request Type" single-select dropdown (line 583) — picks ONE type and loads its work order form
-- The "Request Items" section (line 660) — lets you add multiple items with qty/rate
+### 2. Phase suggestion in billing not working
+Looking at lines 280-346, when a patient is selected, phases ARE fetched and shown (line 624-648). The phase dropdown appears when `patientId && patientPhases.length > 0`. This should work. The issue may be that `patientPhases` isn't populated when loading an existing invoice. In the existing invoice load path (lines 173-201), phases are NOT fetched — only when `selectPatient` is called. Fix: when loading an existing invoice with `patient_id`, also fetch phases.
 
-These serve different purposes but the user sees duplication. The intended flow is: Request Items is the billable line items list; Request Type is the primary work order type that loads dynamic form fields.
+### 3. Patient dropdown in CaseSubmission not working for existing patients
+Line 682: `patientSearchFocused && patientResults.length >= 0` — this is always true when focused (length >= 0 is always true). The dropdown shows but the issue is the results aren't populated when search is empty. Looking at line 180-191, the query runs on focus and fetches up to 20 patients even with empty search. This should work. The real issue might be that `canAccessPatient` filters out all results for non-admin users with no assignments yet. For admin, it should show all. Need to verify.
 
-**Fix**: 
-- Make "Request Type" the primary selector that ALSO auto-adds to Request Items when selected
-- When a request type is selected, auto-add it to `selectedRequestTypes` if not already there
-- Remove hardcoded items ("Aligner Treatment", "Retainer", "Refinement") from the Request Type dropdown since they should come from presets
-- When multiple request items are added, show their work order forms in side-by-side tabs
+### 4. Entity dropdowns showing same options
+The `getScopedEntities` function at line 399-405 correctly filters by `entity_type`. If doctor/clinic/lab all show the same names, it means the database has entities with the same `entity_name` under different `entity_type` values, OR the data hasn't been entered correctly. The code is correct — this is likely a data issue. However, for admin fallback where `allowed` is null (admin), it returns all typed entities correctly.
 
-### 4. Accepting a case from SubmittedCases list does NOT convert to project
-In `SubmittedCases.tsx` line 92-100, `updateStatus` just does a bare status update — it does NOT call `convertCaseToProject`. The conversion only happens:
-- From CaseSubmission detail view `updateStatus` (line 233-242)
-- From SubmittedCases `convertToCase` button (line 112-126) — but this only shows for accepted cases that don't have a patient_id yet
+### 5. Cross-form errors in work order tabs
+When navigating between tabs, the `dynamicFormData` state is shared correctly via keyed records. The issue is likely that `Select` components don't reset their visual state when switching tabs. Radix `Tabs` unmounts inactive tab content by default, which should handle this. Check if `TabsContent` has `forceMount` — it shouldn't need it.
 
-**Root cause**: Accepting from the list view only changes the status text — no project/phase/plan is created. The "Convert to Case" button appears afterward but requires a second click.
-
-**Fix**: In `SubmittedCases.tsx`, when status changes to 'accepted', also call `convertCaseToProject` to create the project/phase/plan/invoice in one step, same as the detail view does.
-
-### 5. Work order form tabs for multiple request items
-Currently only one work order form shows based on `formData.request_type`. When multiple request items are added, their respective work order forms should appear in tabs.
-
-**Fix**: Render a tab per request item that has a linked work order preset, showing each form side by side.
+### 6. Terminology: "Patient" → "Project"
+Many pages still use "Patient" terminology. Need systematic replacement in UI labels across Dashboard, UserDashboard, GlobalKanban, PatientDetail, SubmittedCases, BillingList, WorkOrderDetail, Messages, GlobalAssets.
 
 ## Implementation Plan
 
-### Step 1: Fix patient search to show dropdown on focus
-- `CaseSubmission.tsx`: When input is focused and search is empty, fetch first 10 patients (RBAC-scoped)
-- Show the dropdown immediately on focus with all results
-- Filter as user types
+### Step 1: Migration — add email to profiles + update trigger
+```sql
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email text;
 
-### Step 2: Fix entity dropdowns — remove hardcoded items from Request Type
-- Remove hardcoded "Aligner Treatment", "Retainer", "Refinement", "Other" from the Request Type dropdown
-- Only show `request_type` category presets
-- Keep only `request_type` presets in Request Items selector too
+-- Backfill from auth.users
+UPDATE public.profiles p SET email = u.email FROM auth.users u WHERE p.user_id = u.id AND p.email IS NULL;
 
-### Step 3: Auto-sync Request Type with Request Items
-- When user selects a Request Type, auto-add it to `selectedRequestTypes` if not already present
-- `formData.request_type` becomes the first item's name for backward compatibility
+-- Update trigger to include email
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
+BEGIN
+  INSERT INTO public.profiles (user_id, display_name, email)
+  VALUES (NEW.id, COALESCE(NEW.raw_user_meta_data->>'display_name', NEW.email), NEW.email);
+  RETURN NEW;
+END;
+$$;
+```
 
-### Step 4: Fix SubmittedCases accept → auto-convert
-- In `SubmittedCases.tsx`, change the 'accepted' status action to call `convertCaseToProject` (same as CaseSubmission detail view)
-- Remove the separate "Convert to Case" button since acceptance now handles it
+### Step 2: Billing.tsx fixes
+- In `selectPatient()`: after setting `primaryUserId`, fetch that user's profile email as fallback for `clientDetails.email`
+- In existing invoice load (lines 173-201): after loading invoice, if `patient_id` exists, fetch phases and plans
+- Fix `clientDetails.name` to use entity name (company/clinic) instead of patient name when CRM resolves a client entity
 
-### Step 5: Multi-item work order form tabs
-- Instead of rendering one work order form based on `formData.request_type`, iterate through `selectedRequestTypes`
-- For each item with a linked work order preset, render its form in a tab
-- Store dynamic data keyed by request item index
+### Step 3: CaseSubmission patient dropdown
+- The dropdown code looks correct. Verify that when focused with empty search, it fetches patients. The condition `patientSearch.length >= 1` on line 183 means empty search returns ALL patients (no filter applied). This is correct. If not working, check if `canAccessPatient` is the blocker for admin (should return true).
 
-### Step 6: Billing patient search dropdown
-- Same fix as CaseSubmission: show all patients on focus, filter as user types
+### Step 4: Terminology replacement
+Replace "Patient" with "Project" in UI labels across:
+- `Dashboard.tsx`, `UserDashboard.tsx`, `ClientDashboard.tsx`
+- `GlobalKanban.tsx`, `PatientDetail.tsx` (header/labels only)
+- `SubmittedCases.tsx`, `BillingList.tsx`
+- `WorkOrderDetail.tsx`, `Messages.tsx`, `GlobalAssets.tsx`
+- `Sidebar.tsx`, `BottomNav.tsx`
+
+### Step 5: Cross-form error fix
+Ensure each tab's form fields use the correct `dataKey` (item ID). The current code already does this via `rt.id` keying. If issues persist, add `key={wf.id}` to force re-render on tab switch.
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/pages/CaseSubmission.tsx` | Patient dropdown on focus, remove hardcoded request types, auto-sync request type ↔ request items, multi-item work order tabs |
-| `src/pages/SubmittedCases.tsx` | Accept action calls `convertCaseToProject` directly |
-| `src/pages/Billing.tsx` | Patient dropdown on focus |
-
-## Technical Details
-
-- Patient search: Change `if (patientSearch.length < 2)` to `if (!patientSearchFocused)` and fetch on focus with empty search loading first 10
-- Request Items sync: `useEffect` watches `formData.request_type` changes and auto-adds to `selectedRequestTypes`
-- SubmittedCases accept: Replace `updateStatus(c.id, 'accepted')` with a function that calls `convertCaseToProject(c, presets, user.id)` then updates local state
-- Work order tabs: Map over `selectedRequestTypes`, find linked work order preset for each, render in `<Tabs>`
+| Migration | Add email to profiles, update trigger |
+| `src/pages/Billing.tsx` | Fetch profile email for primary user, load phases on existing invoice, terminology |
+| `src/pages/CaseSubmission.tsx` | Minor terminology fixes |
+| `src/pages/Dashboard.tsx` | Terminology: Patient → Project |
+| `src/pages/UserDashboard.tsx` | Terminology |
+| `src/pages/ClientDashboard.tsx` | Terminology |
+| `src/pages/GlobalKanban.tsx` | Terminology |
+| `src/pages/PatientDetail.tsx` | Terminology in labels |
+| `src/pages/SubmittedCases.tsx` | Terminology |
+| `src/pages/BillingList.tsx` | Terminology |
+| `src/pages/WorkOrderDetail.tsx` | Terminology |
+| `src/pages/Messages.tsx` | Terminology |
+| `src/pages/GlobalAssets.tsx` | Terminology |
+| `src/components/Sidebar.tsx` | Terminology |
+| `src/components/BottomNav.tsx` | Terminology |
+| `src/lib/case-conversion.ts` | Resolve primary user email for invoice client_details |
 
