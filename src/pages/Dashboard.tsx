@@ -257,7 +257,7 @@ export default function Dashboard() {
   }, [currentPatients, search, filterDoctor, filterClinic, filterLab, sortBy]);
 
   const grouped = useMemo(() => {
-    if (groupBy === 'none') return { 'All Cases': filtered };
+    if (groupBy === 'none') return { 'All Projects': filtered };
     const key = groupBy === 'doctor' ? 'doctor_name' : groupBy === 'clinic' ? 'clinic_name' : groupBy === 'lab' ? 'lab_name' : 'country';
     const groups: Record<string, PatientRow[]> = {};
     filtered.forEach(p => {
