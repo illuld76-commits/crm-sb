@@ -197,7 +197,7 @@ export default function Dashboard() {
     const { error } = await supabase.from('patients').update({ archived_at: null }).eq('id', id);
     if (error) { toast.error('Failed to restore'); return; }
     setPatients(prev => prev.map(p => p.id === id ? { ...p, archived_at: null } : p));
-    toast.success('Case restored');
+    toast.success('Project restored');
   };
 
   const toggleExpand = (id: string, e: React.MouseEvent) => {
