@@ -729,6 +729,7 @@ export type Database = {
           clinic_name: string | null
           created_at: string
           display_name: string | null
+          email: string | null
           password_hint: string | null
           user_id: string
         }
@@ -736,6 +737,7 @@ export type Database = {
           clinic_name?: string | null
           created_at?: string
           display_name?: string | null
+          email?: string | null
           password_hint?: string | null
           user_id: string
         }
@@ -743,6 +745,7 @@ export type Database = {
           clinic_name?: string | null
           created_at?: string
           display_name?: string | null
+          email?: string | null
           password_hint?: string | null
           user_id?: string
         }

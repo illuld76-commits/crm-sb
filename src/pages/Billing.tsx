@@ -140,7 +140,7 @@ export default function Billing() {
   const [showPresetPicker, setShowPresetPicker] = useState(false);
 
   // User assignment
-  const [allProfiles, setAllProfiles] = useState<{ user_id: string; display_name: string | null }[]>([]);
+  const [allProfiles, setAllProfiles] = useState<{ user_id: string; display_name: string | null; email?: string | null }[]>([]);
 
   useEffect(() => {
     supabase.from('presets').select('*').order('name').then(({ data }) => {
@@ -150,10 +150,10 @@ export default function Billing() {
     });
     // Load profiles — admin sees all, non-admin sees company peers
     if (isAdmin) {
-      supabase.from('profiles').select('user_id, display_name').then(({ data }) => setAllProfiles(data || []));
+      supabase.from('profiles').select('user_id, display_name, email').then(({ data }) => setAllProfiles(data || []));
     } else if (user) {
       getCompanyPeers(user.id).then(peerIds => {
-        supabase.from('profiles').select('user_id, display_name').then(({ data }) => {
+        supabase.from('profiles').select('user_id, display_name, email').then(({ data }) => {
           setAllProfiles((data || []).filter(p => peerIds.includes(p.user_id)));
         });
       });
@@ -175,7 +175,7 @@ export default function Billing() {
         supabase.from('invoices').select('*').eq('id', invoiceId).single(),
         supabase.from('receipts').select('*').eq('invoice_id', invoiceId).order('payment_date'),
         supabase.from('expenses').select('*').eq('invoice_id', invoiceId).eq('is_deleted', false).order('created_at'),
-      ]).then(([{ data: inv }, { data: recs }, { data: exps }]) => {
+      ]).then(async ([{ data: inv }, { data: recs }, { data: exps }]) => {
         if (inv) {
           setStatus(inv.status);
           setPatientName(inv.patient_name);
@@ -197,6 +197,16 @@ export default function Billing() {
         }
         setReceipts((recs || []) as unknown as Receipt[]);
         setExpenses((exps || []) as unknown as Expense[]);
+        // Fetch phases for existing invoice's patient
+        if (inv?.patient_id) {
+          const { data: phasesData } = await supabase.from('phases').select('id, phase_name').eq('patient_id', inv.patient_id).eq('is_deleted', false).order('phase_order');
+          setPatientPhases(phasesData || []);
+          const phaseIds = (phasesData || []).map(d => d.id);
+          if (phaseIds.length > 0) {
+            const { data: plansData } = await supabase.from('treatment_plans').select('id, plan_name, phase_id').in('phase_id', phaseIds);
+            setPatientPlans((plansData || []) as any);
+          }
+        }
         setLoading(false);
       });
     } else {
@@ -253,9 +263,18 @@ export default function Billing() {
     const clientAddr = crm.client
       ? crm.client.address
       : [p.clinic_name, p.doctor_name].filter(Boolean).join(' • ');
+    // Resolve primary user email as fallback
+    let resolvedEmail = crm.client?.email || patientFull?.contact_email || '';
+    if (!resolvedEmail) {
+      const puId = patientFull?.primary_user_id || crm.primaryUserId;
+      if (puId) {
+        const { data: puProfile } = await supabase.from('profiles').select('email').eq('user_id', puId).single();
+        if (puProfile?.email) resolvedEmail = puProfile.email;
+      }
+    }
     setClientDetails({
-      name: p.patient_name,
-      email: crm.client?.email || patientFull?.contact_email || '',
+      name: crm.client?.entityName || p.patient_name,
+      email: resolvedEmail,
       address: clientAddr,
     });
 
@@ -384,7 +403,7 @@ export default function Billing() {
   };
 
   const saveInvoice = async (newStatus?: string) => {
-    if (!user || !patientName) { toast.error('Patient name required'); return; }
+    if (!user || !patientName) { toast.error('Project name required'); return; }
     if (!isAdmin && isNew) { toast.error('Only admin can create invoices'); return; }
     if (!isAdmin && !isNew && status !== 'draft') { toast.error('Only admin can edit non-draft invoices'); return; }
     if (!placeOfSupply) { toast.error('Place of Supply is required'); return; }
