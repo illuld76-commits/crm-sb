@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
@@ -56,6 +56,7 @@ export default function CaseSubmission() {
 
   // Settings entities for dropdowns
   const [settingsEntities, setSettingsEntities] = useState<{ entity_name: string; entity_type: string }[]>([]);
+  const lastSyncedRequestType = useRef('');
 
   const createRequestTypeItem = (name = '', presetId = '', qty = 1, fee = 0) => ({
     id: crypto.randomUUID(),
@@ -161,9 +162,12 @@ export default function CaseSubmission() {
     }
   }, [allowedClinics, allowedCompanies, allowedDoctors, allowedLabs, id, isAdmin]);
 
-  // Auto-sync: when request_type changes, add it to selectedRequestTypes if not already there
+  // Auto-sync: when request_type changes, add it to selectedRequestTypes (guarded by ref to prevent flicker)
   useEffect(() => {
     if (!formData.request_type || formData.request_type === 'Other') return;
+    if (formData.request_type === lastSyncedRequestType.current) return;
+    if (presets.length === 0) return;
+    lastSyncedRequestType.current = formData.request_type;
     setSelectedRequestTypes(prev => {
       if (prev.some(rt => rt.name === formData.request_type)) return prev;
       const preset = presets.find(p => p.category === 'request_type' && p.name === formData.request_type);
