@@ -40,7 +40,7 @@ export function useUserScope() {
     assignments.filter(a => a.assignment_type === 'patient' && (!a.expires_at || new Date(a.expires_at) >= new Date())).map(a => a.assignment_value);
 
   const filterEntities = useCallback((entities: { entity_name: string; entity_type: string }[], type: string): { entity_name: string; entity_type: string }[] => {
-    if (isAdmin) return entities;
+    if (isAdmin) return entities.filter(e => e.entity_type === type);
     let allowed: string[] | null = null;
     switch (type) {
       case 'clinic': allowed = allowedClinics; break;
@@ -49,7 +49,18 @@ export function useUserScope() {
       case 'company': allowed = allowedCompanies; break;
     }
     if (!allowed || allowed.length === 0) return [];
-    return entities.filter(e => e.entity_type === type && allowed!.includes(e.entity_name));
+    // Return assignment values, using matching settings_entities where available,
+    // but also including assignment values not in settings_entities
+    const existingNames = new Set(entities.filter(e => e.entity_type === type).map(e => e.entity_name));
+    const result: { entity_name: string; entity_type: string }[] = [];
+    for (const name of allowed) {
+      if (existingNames.has(name)) {
+        result.push(entities.find(e => e.entity_type === type && e.entity_name === name)!);
+      } else {
+        result.push({ entity_name: name, entity_type: type });
+      }
+    }
+    return result;
   }, [isAdmin, assignments]);
 
   const canAccessPatient = useCallback((patient: {
