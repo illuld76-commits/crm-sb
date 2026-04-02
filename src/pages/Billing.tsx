@@ -754,7 +754,7 @@ export default function Billing() {
                         <div className="flex flex-wrap gap-1 mt-1">
                           {secondaryUserIds.map(uid => (
                             <Badge key={uid} variant="secondary" className="text-[10px] gap-1">
-                              {profileLabel(allProfiles.find(p => p.user_id === uid) || { user_id: uid, display_name: uid.slice(0, 8), email: '' })}
+                              {profileLabel(allProfiles.find(p => p.user_id === uid) || { user_id: uid, display_name: uid.slice(0, 8), email: '', assignmentSummary: '' })}
                               {isEditable && <button onClick={() => setSecondaryUserIds(prev => prev.filter(x => x !== uid))} className="ml-0.5 hover:text-destructive">×</button>}
                             </Badge>
                           ))}
