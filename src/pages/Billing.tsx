@@ -570,7 +570,7 @@ export default function Billing() {
   const addExpense = async () => {
     if (!invoiceId || !expDesc) return;
     const { data, error } = await supabase.from('expenses').insert({
-      invoice_id: invoiceId, patient_id: patientId, user_id: user!.id,
+      invoice_id: invoiceId, patient_id: patientId,
       vendor_name: expVendor, description: expDesc,
       amount: parseFloat(expAmount) || 0, currency,
       category: expCategory, is_billable: expBillable, notes: expNotes || null,

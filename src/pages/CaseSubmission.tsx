@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
 import { useUserScope } from '@/hooks/useUserScope';
 import { supabase } from '@/integrations/supabase/client';
+import { getCompanyPeers } from '@/lib/company-scope';
 import Header from '@/components/Header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
