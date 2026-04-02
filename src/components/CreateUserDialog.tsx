@@ -37,6 +37,7 @@ export default function CreateUserDialog({ patients, onCreated }: CreateUserDial
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [assignType, setAssignType] = useState<'patient' | 'clinic' | 'doctor' | 'lab' | 'company'>('patient');
   const [assignValue, setAssignValue] = useState('');
+  const [assignIsPrimary, setAssignIsPrimary] = useState(false);
   const [loading, setLoading] = useState(false);
   const [entities, setEntities] = useState<{ id: string; entity_name: string; entity_type: string }[]>([]);
 
