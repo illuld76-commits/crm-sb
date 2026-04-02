@@ -978,6 +978,7 @@ export type Database = {
           created_at: string
           expires_at: string | null
           id: string
+          is_primary: boolean
           user_id: string
         }
         Insert: {
@@ -987,6 +988,7 @@ export type Database = {
           created_at?: string
           expires_at?: string | null
           id?: string
+          is_primary?: boolean
           user_id: string
         }
         Update: {
@@ -996,6 +998,7 @@ export type Database = {
           created_at?: string
           expires_at?: string | null
           id?: string
+          is_primary?: boolean
           user_id?: string
         }
         Relationships: []
