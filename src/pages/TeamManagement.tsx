@@ -188,6 +188,9 @@ export default function TeamManagement() {
                           <span className="text-xs text-muted-foreground">{member.role === 'admin' ? 'Full access' : 'No assignments'}</span>
                         ) : member.assignments.map(a => (
                           <Badge key={a.id} variant="outline" className="gap-1 pr-1">
+                            <button onClick={() => togglePrimary(a)} className={`mr-0.5 ${a.is_primary ? 'text-yellow-500' : 'text-muted-foreground/30 hover:text-yellow-400'}`} title={a.is_primary ? 'Primary (click to unset)' : 'Set as primary'}>
+                              <Star className={`w-2.5 h-2.5 ${a.is_primary ? 'fill-yellow-500' : ''}`} />
+                            </button>
                             <span className="text-[10px] capitalize">{a.type}:</span>
                             <span className="text-[10px]">{a.type === 'patient' ? patients.find(p => p.id === a.value)?.patient_name || a.value : a.value}</span>
                             {a.expires_at && <span className="text-[9px] text-muted-foreground">exp:{format(new Date(a.expires_at), 'MM/dd')}</span>}
