@@ -82,19 +82,42 @@ export async function resolveCrmContacts(patient: {
     if (labEntity) merchant = toContactInfo(labEntity);
   }
 
-  // Resolve primary user from user_assignments
+  // Resolve primary user from user_assignments (prefer is_primary = true)
   let primaryUserId: string | null = null;
+  let primaryUserEmail: string | null = null;
   if (client) {
     const { data: assignments } = await supabase
       .from('user_assignments')
-      .select('user_id')
+      .select('user_id, is_primary')
       .eq('assignment_type', client.entityType)
       .eq('assignment_value', client.entityName)
+      .order('is_primary', { ascending: false })
+      .order('created_at', { ascending: true })
       .limit(1);
     if (assignments && assignments.length > 0) {
       primaryUserId = assignments[0].user_id;
+      // Fetch email from profile
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('email')
+        .eq('user_id', primaryUserId)
+        .single();
+      if (profile?.email) primaryUserEmail = profile.email;
     }
   }
 
-  return { client, merchant, primaryUserId };
+  // Collect all entity circle users (for secondary_user_ids)
+  let entityCircleUserIds: string[] = [];
+  if (client) {
+    const { data: circleAssignments } = await supabase
+      .from('user_assignments')
+      .select('user_id')
+      .eq('assignment_type', client.entityType)
+      .eq('assignment_value', client.entityName);
+    entityCircleUserIds = (circleAssignments || [])
+      .map(a => a.user_id)
+      .filter(uid => uid !== primaryUserId);
+  }
+
+  return { client, merchant, primaryUserId, primaryUserEmail, entityCircleUserIds };
 }
