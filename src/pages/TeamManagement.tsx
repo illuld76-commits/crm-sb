@@ -62,7 +62,7 @@ export default function TeamManagement() {
         const role = roles.find(r => r.user_id === p.user_id);
         const userAssignments = (assignments || [])
           .filter(a => a.user_id === p.user_id)
-          .map(a => ({ id: a.id, type: a.assignment_type, value: a.assignment_value, expires_at: a.expires_at }));
+          .map(a => ({ id: a.id, type: a.assignment_type, value: a.assignment_value, expires_at: a.expires_at, is_primary: (a as any).is_primary || false }));
         memberMap[p.user_id] = {
           user_id: p.user_id, display_name: p.display_name || 'Unknown',
           role: (role?.role as 'admin' | 'user') || 'user', password_hint: p.password_hint,
