@@ -10,9 +10,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { UserPlus, X, Plus } from 'lucide-react';
+import { UserPlus, X, Plus, Star } from 'lucide-react';
 
 interface Assignment {
   type: 'patient' | 'clinic' | 'doctor' | 'lab' | 'company';
