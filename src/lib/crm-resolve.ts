@@ -16,6 +16,8 @@ export interface CrmResolution {
   client: CrmContactInfo | null;
   merchant: CrmContactInfo | null;
   primaryUserId: string | null;
+  primaryUserEmail: string | null;
+  entityCircleUserIds: string[];
 }
 
 /**
