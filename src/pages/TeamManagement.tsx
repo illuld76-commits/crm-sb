@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ArrowLeft, Trash2, UserCog, Edit, KeyRound } from 'lucide-react';
+import { ArrowLeft, Trash2, UserCog, Edit, KeyRound, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import SnaponLogo from '@/components/SnaponLogo';
