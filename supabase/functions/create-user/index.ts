@@ -17,6 +17,7 @@ const BodySchema = z.object({
       type: z.string(),
       value: z.string(),
       expires_at: z.string().nullable().optional(),
+      is_primary: z.boolean().optional(),
     })
   ).optional(),
 });
