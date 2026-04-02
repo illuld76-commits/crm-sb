@@ -19,6 +19,7 @@ interface Assignment {
   type: 'patient' | 'clinic' | 'doctor' | 'lab' | 'company';
   value: string;
   expires_at: string | null;
+  is_primary: boolean;
 }
 
 interface CreateUserDialogProps {
