@@ -21,7 +21,7 @@ interface TeamMember {
   display_name: string;
   role: 'admin' | 'user';
   password_hint: string | null;
-  assignments: { id: string; type: string; value: string; expires_at: string | null }[];
+  assignments: { id: string; type: string; value: string; expires_at: string | null; is_primary: boolean }[];
   created_at: string;
 }
 
