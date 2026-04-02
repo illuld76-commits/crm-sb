@@ -81,6 +81,21 @@ export default function TeamManagement() {
     fetchTeam();
   };
 
+  const togglePrimary = async (assignment: TeamMember['assignments'][0]) => {
+    // If making primary, first unset any existing primary for this entity
+    if (!assignment.is_primary) {
+      await supabase.from('user_assignments')
+        .update({ is_primary: false } as any)
+        .eq('assignment_type', assignment.type)
+        .eq('assignment_value', assignment.value);
+    }
+    await supabase.from('user_assignments')
+      .update({ is_primary: !assignment.is_primary } as any)
+      .eq('id', assignment.id);
+    toast.success(assignment.is_primary ? 'Removed primary status' : 'Set as primary');
+    fetchTeam();
+  };
+
   const callManageUser = async (payload: Record<string, unknown>) => {
     const { data, error } = await supabase.functions.invoke('manage-user', { body: payload });
     if (error) { toast.error(error.message || 'Operation failed'); return false; }
