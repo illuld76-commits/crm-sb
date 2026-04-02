@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from '@/components/Sidebar';
 import BottomNav from '@/components/BottomNav';
 import { useAuth } from '@/hooks/useAuth';
@@ -15,16 +15,16 @@ interface PlanMin { id: string; phase_id: string; plan_name: string; }
 export default function Layout() {
   const { user } = useAuth();
   const { isAdmin } = useRole();
+  const location = useLocation();
   const [patients, setPatients] = useState<PatientMin[]>([]);
   const [phases, setPhases] = useState<PhaseMin[]>([]);
   const [plans, setPlans] = useState<PlanMin[]>([]);
   const [caseRequests, setCaseRequests] = useState<CaseRequest[]>([]);
   const [assignments, setAssignments] = useState<UserAssignment[]>([]);
 
-  useEffect(() => {
+  const fetchData = useCallback(async () => {
     if (!user) return;
 
-    const fetchData = async () => {
       const [{ data: pData }, { data: phData }, { data: plData }] = await Promise.all([
         supabase.from('patients').select('id, patient_name, doctor_name, clinic_name, lab_name, company_name, user_id, primary_user_id, secondary_user_id, archived_at').is('archived_at', null).order('created_at', { ascending: false }),
         supabase.from('phases').select('id, patient_id, phase_name').order('phase_order'),
@@ -45,7 +45,10 @@ export default function Layout() {
         const a = await getUserAssignments(user.id);
         setAssignments(a);
       }
-    };
+  }, [user, isAdmin]);
+
+  useEffect(() => {
+    if (!user) return;
 
     fetchData();
 
@@ -59,7 +62,12 @@ export default function Layout() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [user, isAdmin]);
+  }, [user, fetchData]);
+
+  useEffect(() => {
+    if (!user) return;
+    fetchData();
+  }, [user, location.pathname, fetchData]);
 
   const filteredPatients = useMemo(() => {
     if (isAdmin) return patients;

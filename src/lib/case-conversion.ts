@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { CaseRequest, Preset } from '@/types';
 import { resolveCrmContacts } from '@/lib/crm-resolve';
+import { mergeUserIds, normalizeAssignmentSelection, parseAssignmentSelection } from '@/lib/case-assignment';
 
 export interface ConversionResult {
   patientId: string;
@@ -26,6 +27,25 @@ export async function convertCaseToProject(
 
   let patientId = caseReq.patient_id || null;
 
+  if (!patientId) {
+    const { data: existingConverted } = await supabase
+      .from('patients')
+      .select('id')
+      .eq('patient_name', caseReq.patient_name)
+      .eq('user_id', caseReq.user_id)
+      .eq('clinic_name', caseReq.clinic_name || null)
+      .eq('doctor_name', caseReq.doctor_name || null)
+      .eq('lab_name', caseReq.lab_name || null)
+      .eq('company_name', ((caseReq.dynamic_data as Record<string, any> | undefined)?.company_name as string | null) || null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingConverted?.id) {
+      patientId = existingConverted.id;
+    }
+  }
+
   // Resolve CRM contacts early for primary/secondary user tagging
   const companyName = (caseReq.dynamic_data as Record<string, any> | undefined)?.company_name || null;
   const crm = await resolveCrmContacts({
@@ -34,6 +54,11 @@ export async function convertCaseToProject(
     doctor_name: caseReq.doctor_name,
     lab_name: caseReq.lab_name,
   });
+  const explicitAssignments = parseAssignmentSelection((caseReq.dynamic_data as Record<string, any> | undefined) || null);
+  const resolvedAssignments = normalizeAssignmentSelection(
+    explicitAssignments.primaryUserId || crm.primaryUserId || null,
+    mergeUserIds(explicitAssignments.secondaryUserIds, crm.entityCircleUserIds, caseReq.user_id),
+  );
 
   // 1. Create patient if not linked
   if (!patientId) {
@@ -46,19 +71,16 @@ export async function convertCaseToProject(
       doctor_name: caseReq.doctor_name || null,
       lab_name: caseReq.lab_name || null,
       company_name: companyName,
-      primary_user_id: crm.primaryUserId || null,
-      secondary_user_id: crm.entityCircleUserIds[0] || null,
+      primary_user_id: resolvedAssignments.primaryUserId,
+      secondary_user_id: resolvedAssignments.secondaryUserIds[0] || null,
     }).select('id').single();
     if (error || !newPatient) return null;
     patientId = newPatient.id;
   } else {
-    // Update existing patient with primary/secondary user if missing
-    if (crm.primaryUserId) {
-      await supabase.from('patients').update({
-        primary_user_id: crm.primaryUserId,
-        secondary_user_id: crm.entityCircleUserIds[0] || null,
-      }).eq('id', patientId).is('primary_user_id', null);
-    }
+    await supabase.from('patients').update({
+      primary_user_id: resolvedAssignments.primaryUserId,
+      secondary_user_id: resolvedAssignments.secondaryUserIds[0] || null,
+    }).eq('id', patientId);
   }
 
   // 2. Determine next phase order
@@ -145,7 +167,12 @@ export async function convertCaseToProject(
       .eq('case_id', patientId!)
       .in('file_url', urls);
     const existingUrls = new Set((existingAssets || []).map(a => a.file_url));
-    const newAttachments = caseAttachments.filter((att: any) => att.url && !existingUrls.has(att.url));
+    const seenUrls = new Set<string>();
+    const newAttachments = caseAttachments.filter((att: any) => {
+      if (!att.url || existingUrls.has(att.url) || seenUrls.has(att.url)) return false;
+      seenUrls.add(att.url);
+      return true;
+    });
     if (newAttachments.length > 0) {
       const assetInserts = newAttachments.map((att: any) => ({
         case_id: patientId!,
@@ -230,8 +257,8 @@ export async function convertCaseToProject(
       gst_number: gstNumber || null,
       place_of_supply: placeOfSupply || null,
       hsn_code: '9993',
-      primary_user_id: crm.primaryUserId || null,
-      secondary_user_ids: crm.entityCircleUserIds.length > 0 ? crm.entityCircleUserIds as any : null,
+      primary_user_id: resolvedAssignments.primaryUserId,
+      secondary_user_ids: resolvedAssignments.secondaryUserIds.length > 0 ? resolvedAssignments.secondaryUserIds as any : null,
     }).select('id').single();
     if (inv) invoiceId = inv.id;
   }
