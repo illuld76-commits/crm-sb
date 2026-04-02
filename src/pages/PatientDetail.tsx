@@ -351,7 +351,10 @@ export default function PatientDetail() {
         });
       });
     });
-    setAssets([...(assetData || []), ...caseReqAssets]);
+    const mergedAssets = [...(assetData || []), ...caseReqAssets].filter((asset, index, collection) =>
+      collection.findIndex(candidate => candidate.file_url === asset.file_url) === index,
+    );
+    setAssets(mergedAssets);
     // Activity timeline: use hoisted fetchedPlanData/fetchedRemarkData
     const phaseIds2 = (phaseData || []).map((ph: any) => ph.id);
     const localPlanIds = fetchedPlanData.map((pl: any) => pl.id);
