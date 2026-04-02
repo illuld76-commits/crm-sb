@@ -211,6 +211,7 @@ export default function CreateUserDialog({ patients, onCreated }: CreateUserDial
             <div className="flex flex-wrap gap-1.5">
               {assignments.map((a, i) => (
                 <Badge key={i} variant="secondary" className="gap-1 pr-1">
+                  {a.is_primary && <Star className="w-3 h-3 fill-yellow-500 text-yellow-500" />}
                   <span className="text-xs capitalize">{a.type}:</span>
                   <span className="text-xs font-medium">
                     {a.type === 'patient' ? patients.find(p => p.id === a.value)?.patient_name || a.value : a.value}
