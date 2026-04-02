@@ -103,6 +103,7 @@ export default function CreateUserDialog({ patients, onCreated }: CreateUserDial
             type: a.type,
             value: a.value,
             expires_at: a.expires_at,
+            is_primary: a.is_primary,
           })),
         },
       });
