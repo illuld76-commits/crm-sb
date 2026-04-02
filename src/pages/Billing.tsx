@@ -165,12 +165,51 @@ export default function Billing() {
     const prefillPhaseId = searchParams.get('phaseId');
     if (prefillPatientId) {
       setPatientId(prefillPatientId);
-      supabase.from('phases').select('id, phase_name').eq('patient_id', prefillPatientId)
-        .eq('is_deleted', false).order('phase_order').then(({ data }) => {
-          setPatientPhases(data || []);
-        });
-    }
-    if (prefillPatientName) {
+      // Fetch full patient + resolve CRM for pre-filled patient
+      (async () => {
+        const { data: patientFull } = await supabase.from('patients').select('*').eq('id', prefillPatientId).single();
+        if (patientFull) {
+          setPatientName(patientFull.patient_name);
+          setClientDetails(prev => ({ ...prev, name: patientFull.patient_name }));
+          if (patientFull.primary_user_id) setPrimaryUserId(patientFull.primary_user_id);
+          if (patientFull.secondary_user_id) setSecondaryUserIds([patientFull.secondary_user_id]);
+
+          // CRM resolution for auto-populating client/merchant details
+          const crm = await resolveCrmContacts({
+            clinic_name: patientFull.clinic_name,
+            doctor_name: patientFull.doctor_name,
+            lab_name: patientFull.lab_name,
+            company_name: patientFull.company_name,
+          });
+          let resolvedEmail = crm.primaryUserEmail || crm.client?.email || patientFull.contact_email || '';
+          if (!resolvedEmail && crm.primaryUserId) {
+            const { data: puProfile } = await supabase.from('profiles').select('email').eq('user_id', crm.primaryUserId).single();
+            if (puProfile?.email) resolvedEmail = puProfile.email;
+          }
+          setClientDetails({
+            name: crm.client?.entityName || patientFull.patient_name,
+            email: resolvedEmail,
+            address: crm.client?.address || '',
+          });
+          if (crm.client?.gstNumber) setGstNumber(crm.client.gstNumber);
+          if (crm.client?.state) setPlaceOfSupply(crm.client.state);
+          if (!patientFull.primary_user_id && crm.primaryUserId) setPrimaryUserId(crm.primaryUserId);
+          if (crm.entityCircleUserIds.length > 0) {
+            setSecondaryUserIds(prev => Array.from(new Set([...prev, ...crm.entityCircleUserIds])));
+          }
+          if (crm.merchant) {
+            setMerchantDetails(prev => ({
+              ...prev,
+              name: crm.merchant!.name || prev.name,
+              email: crm.merchant!.email || prev.email,
+              address: crm.merchant!.address || prev.address,
+            }));
+          }
+        }
+        const { data: phasesData } = await supabase.from('phases').select('id, phase_name').eq('patient_id', prefillPatientId).eq('is_deleted', false).order('phase_order');
+        setPatientPhases(phasesData || []);
+      })();
+    } else if (prefillPatientName) {
       setPatientName(prefillPatientName);
       setClientDetails(prev => ({ ...prev, name: prefillPatientName }));
     }

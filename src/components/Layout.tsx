@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from '@/components/Sidebar';
 import BottomNav from '@/components/BottomNav';
@@ -48,6 +48,17 @@ export default function Layout() {
     };
 
     fetchData();
+
+    // Realtime subscription for patients, phases, treatment_plans
+    const channel = supabase
+      .channel('layout-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'patients' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'phases' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'treatment_plans' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'case_requests' }, () => fetchData())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [user, isAdmin]);
 
   const filteredPatients = useMemo(() => {
