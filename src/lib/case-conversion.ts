@@ -26,9 +26,17 @@ export async function convertCaseToProject(
 
   let patientId = caseReq.patient_id || null;
 
+  // Resolve CRM contacts early for primary/secondary user tagging
+  const companyName = (caseReq.dynamic_data as Record<string, any> | undefined)?.company_name || null;
+  const crm = await resolveCrmContacts({
+    company_name: companyName,
+    clinic_name: caseReq.clinic_name,
+    doctor_name: caseReq.doctor_name,
+    lab_name: caseReq.lab_name,
+  });
+
   // 1. Create patient if not linked
   if (!patientId) {
-    const companyName = (caseReq.dynamic_data as Record<string, any> | undefined)?.company_name || null;
     const { data: newPatient, error } = await supabase.from('patients').insert({
       patient_name: caseReq.patient_name,
       patient_age: caseReq.patient_age,
@@ -38,9 +46,19 @@ export async function convertCaseToProject(
       doctor_name: caseReq.doctor_name || null,
       lab_name: caseReq.lab_name || null,
       company_name: companyName,
+      primary_user_id: crm.primaryUserId || null,
+      secondary_user_id: crm.entityCircleUserIds[0] || null,
     }).select('id').single();
     if (error || !newPatient) return null;
     patientId = newPatient.id;
+  } else {
+    // Update existing patient with primary/secondary user if missing
+    if (crm.primaryUserId) {
+      await supabase.from('patients').update({
+        primary_user_id: crm.primaryUserId,
+        secondary_user_id: crm.entityCircleUserIds[0] || null,
+      }).eq('id', patientId).is('primary_user_id', null);
+    }
   }
 
   // 2. Determine next phase order
