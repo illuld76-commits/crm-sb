@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from '@/components/Sidebar';
 import BottomNav from '@/components/BottomNav';
