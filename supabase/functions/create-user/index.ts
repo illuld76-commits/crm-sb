@@ -119,6 +119,7 @@ Deno.serve(async (req) => {
         assignment_value: a.value,
         assigned_by: callerId,
         expires_at: a.expires_at || null,
+        is_primary: a.is_primary || false,
       }));
       await adminClient.from("user_assignments").insert(rows);
     }
