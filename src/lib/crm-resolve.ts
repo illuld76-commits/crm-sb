@@ -37,7 +37,7 @@ export async function resolveCrmContacts(patient: {
   if (patient.doctor_name) entityNames.push({ name: patient.doctor_name, type: 'doctor' });
   if (patient.lab_name) entityNames.push({ name: patient.lab_name, type: 'lab' });
 
-  if (entityNames.length === 0) return { client: null, merchant: null, primaryUserId: null };
+  if (entityNames.length === 0) return { client: null, merchant: null, primaryUserId: null, primaryUserEmail: null, entityCircleUserIds: [] };
 
   // Fetch all matching entities in one query
   const { data: entities } = await supabase
