@@ -25,12 +25,13 @@ import ToothChartSelector, { ToothSelection } from '@/components/ToothChartSelec
 import { convertCaseToProject } from '@/lib/case-conversion';
 import { resolveCrmContacts } from '@/lib/crm-resolve';
 import { mergeUserIds, parseAssignmentSelection } from '@/lib/case-assignment';
+import { AssigneeOption, formatAssigneeLabel, loadAssignableProfiles } from '@/lib/assignee-options';
 import { format, formatDistanceToNow } from 'date-fns';
 
 export default function CaseSubmission() {
   const { id } = useParams();
   const { user } = useAuth();
-  const { isAdmin } = useRole();
+  const { isAdmin, loading: roleLoading } = useRole();
   const { allowedClinics, allowedDoctors, allowedLabs, allowedCompanies, canAccessPatient, loading: scopeLoading } = useUserScope();
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,7 +61,7 @@ export default function CaseSubmission() {
 
   // Settings entities for dropdowns
   const [settingsEntities, setSettingsEntities] = useState<{ entity_name: string; entity_type: string }[]>([]);
-  const [allProfiles, setAllProfiles] = useState<{ user_id: string; display_name: string | null; email: string | null }[]>([]);
+  const [allProfiles, setAllProfiles] = useState<AssigneeOption[]>([]);
   const [assignedPrimaryUserId, setAssignedPrimaryUserId] = useState<string | null>(null);
   const [assignedSecondaryUserIds, setAssignedSecondaryUserIds] = useState<string[]>([]);
   const lastSyncedRequestType = useRef('');
@@ -108,16 +109,20 @@ export default function CaseSubmission() {
       setSettingsEntities(data || []);
     });
 
-    if (isAdmin) {
-      supabase.from('profiles').select('user_id, display_name, email').then(({ data }) => setAllProfiles(data || []));
-    } else if (user) {
-      getCompanyPeers(user.id).then(peerIds => {
-        supabase.from('profiles').select('user_id, display_name, email').then(({ data }) => {
-          setAllProfiles((data || []).filter(profile => peerIds.includes(profile.user_id)));
-        });
-      });
-    }
   }, []);
+
+  useEffect(() => {
+    if (roleLoading) return;
+
+    let isActive = true;
+    loadAssignableProfiles(user?.id, isAdmin).then((profiles) => {
+      if (isActive) setAllProfiles(profiles);
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [user?.id, isAdmin, roleLoading]);
 
   // Effect 2: Auto-fill for single-assignment non-admin users (run once when scope loads)
   useEffect(() => {
@@ -218,8 +223,7 @@ export default function CaseSubmission() {
     syncAssignments();
   }, [formData.clinic_name, formData.doctor_name, formData.lab_name, formData.company_name]);
 
-  const profileLabel = (profile: { display_name: string | null; email: string | null; user_id: string }) =>
-    [profile.display_name || 'Unnamed user', profile.email].filter(Boolean).join(' • ');
+  const profileLabel = formatAssigneeLabel;
 
   // Auto-sync: when request_type changes, add it to selectedRequestTypes (guarded by ref to prevent flicker)
   useEffect(() => {

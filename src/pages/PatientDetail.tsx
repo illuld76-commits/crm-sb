@@ -28,13 +28,13 @@ import {
 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import SnaponLogo from '@/components/SnaponLogo';
-import { getCompanyPeers } from '@/lib/company-scope';
 import { logAction } from '@/lib/audit';
 import IPRQuadrantDiagram from '@/components/IPRQuadrantDiagram';
 import ToothMovementChart from '@/components/ToothMovementChart';
 import CommunicationHub from '@/components/CommunicationHub';
 import FilePreviewModal, { PreviewFile } from '@/components/FilePreviewModal';
 import { IPRData, ToothMovementData } from '@/lib/csv-parser';
+import { AssigneeOption, formatAssigneeLabel, loadAssignableProfiles } from '@/lib/assignee-options';
 
 interface Phase {
   id: string;
@@ -96,6 +96,8 @@ interface PatientData {
 interface ProfileItem {
   user_id: string;
   display_name: string | null;
+  email: string | null;
+  assignmentSummary: string;
 }
 
 interface InvoiceRow {
@@ -133,7 +135,7 @@ export default function PatientDetail() {
   const { id } = useParams();
   const isNew = id === 'new';
   const { user } = useAuth();
-  const { isAdmin } = useRole();
+  const { isAdmin, loading: roleLoading } = useRole();
   const { filterEntities: scopeFilterEntities } = useUserScope();
   const navigate = useNavigate();
 
@@ -203,8 +205,12 @@ export default function PatientDetail() {
   useEffect(() => {
     if (!isNew && id) loadPatient(id);
     fetchSettingsEntities();
+  }, [id, isNew]);
+
+  useEffect(() => {
+    if (roleLoading) return;
     fetchAllProfiles();
-  }, [id]);
+  }, [user?.id, isAdmin, roleLoading]);
 
   // Realtime subscriptions for live updates
   useEffect(() => {
@@ -262,15 +268,8 @@ export default function PatientDetail() {
   };
 
   const fetchAllProfiles = async () => {
-    const { data } = await supabase.from('profiles').select('user_id, display_name');
-    const all = data || [];
-    if (isAdmin || !user) {
-      setAllProfiles(all);
-    } else {
-      // Company-circle scoping: only show peers + admins
-      const peerIds = await getCompanyPeers(user.id);
-      setAllProfiles(all.filter(p => peerIds.includes(p.user_id)));
-    }
+    const all = await loadAssignableProfiles(user?.id, isAdmin);
+    setAllProfiles(all);
   };
 
   const loadPatient = async (patientId: string) => {
@@ -620,7 +619,7 @@ export default function PatientDetail() {
         <SelectTrigger className="h-9"><SelectValue placeholder="Select user..." /></SelectTrigger>
         <SelectContent>
           <SelectItem value="__none__">None</SelectItem>
-          {allProfiles.map((p) => <SelectItem key={p.user_id} value={p.user_id}>{p.display_name || p.user_id.slice(0, 8)}</SelectItem>)}
+          {allProfiles.map((p) => <SelectItem key={p.user_id} value={p.user_id}>{formatAssigneeLabel(p)}</SelectItem>)}
         </SelectContent>
       </Select>
     </div>;
@@ -1210,7 +1209,7 @@ export default function PatientDetail() {
                       <SelectTrigger className="h-9"><SelectValue placeholder="Select..." /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none__">Unassigned</SelectItem>
-                        {allProfiles.map(p => <SelectItem key={p.user_id} value={p.user_id}>{p.display_name || p.user_id.slice(0, 8)}</SelectItem>)}
+                        {allProfiles.map(p => <SelectItem key={p.user_id} value={p.user_id}>{formatAssigneeLabel(p)}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     {!isAdmin && <p className="text-[10px] text-muted-foreground mt-0.5">Showing users with access to this project</p>}

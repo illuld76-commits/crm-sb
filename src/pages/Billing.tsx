@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useUserScope } from '@/hooks/useUserScope';
 import { resolveCrmContacts } from '@/lib/crm-resolve';
 import { mergeUserIds, parseAssignmentSelection } from '@/lib/case-assignment';
+import { AssigneeOption, formatAssigneeLabel, loadAssignableProfiles } from '@/lib/assignee-options';
 
 import Header from '@/components/Header';
 import { Button } from '@/components/ui/button';
@@ -22,7 +23,6 @@ import { sendNotification } from '@/lib/notifications';
 import { Invoice, Receipt, Preset } from '@/types';
 import { format } from 'date-fns';
 import { useRelationalNav } from '@/hooks/useRelationalNav';
-import { getCompanyPeers } from '@/lib/company-scope';
 
 const CURRENCIES = [
   { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
@@ -81,7 +81,7 @@ export default function Billing() {
   const { invoiceId } = useParams();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
-  const { isAdmin, canAccessPatient } = useUserScope();
+  const { isAdmin, canAccessPatient, loading: scopeLoading } = useUserScope();
   const navigate = useNavigate();
   const { openPreview } = useRelationalNav();
   const isNew = !invoiceId;
@@ -141,9 +141,21 @@ export default function Billing() {
   const [showPresetPicker, setShowPresetPicker] = useState(false);
 
   // User assignment
-  const [allProfiles, setAllProfiles] = useState<{ user_id: string; display_name: string | null; email?: string | null }[]>([]);
-  const profileLabel = (profile: { user_id: string; display_name: string | null; email?: string | null }) =>
-    [profile.display_name || 'Unnamed user', profile.email].filter(Boolean).join(' • ');
+  const [allProfiles, setAllProfiles] = useState<AssigneeOption[]>([]);
+  const profileLabel = formatAssigneeLabel;
+
+  useEffect(() => {
+    if (scopeLoading) return;
+
+    let isActive = true;
+    loadAssignableProfiles(user?.id, isAdmin).then((profiles) => {
+      if (isActive) setAllProfiles(profiles);
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [user?.id, isAdmin, scopeLoading]);
 
   useEffect(() => {
     supabase.from('presets').select('*').order('name').then(({ data }) => {
@@ -151,16 +163,6 @@ export default function Billing() {
       setAllPresets(all);
       setPresets(all.filter(p => p.category === 'fee' || p.category === 'item' || p.category === 'fee_item'));
     });
-    // Load profiles — admin sees all, non-admin sees company peers
-    if (isAdmin) {
-      supabase.from('profiles').select('user_id, display_name, email').then(({ data }) => setAllProfiles(data || []));
-    } else if (user) {
-      getCompanyPeers(user.id).then(peerIds => {
-        supabase.from('profiles').select('user_id, display_name, email').then(({ data }) => {
-          setAllProfiles((data || []).filter(p => peerIds.includes(p.user_id)));
-        });
-      });
-    }
 
     // Pre-fill from query params (bill from phase/plan)
     const prefillPatientId = searchParams.get('patientId');
@@ -743,7 +745,7 @@ export default function Billing() {
                         <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Add user..." /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="__add__">Add user...</SelectItem>
-                          {allProfiles.filter(p => !secondaryUserIds.includes(p.user_id)).map(p => (
+                          {allProfiles.filter(p => p.user_id !== primaryUserId && !secondaryUserIds.includes(p.user_id)).map(p => (
                             <SelectItem key={p.user_id} value={p.user_id}>{profileLabel(p)}</SelectItem>
                           ))}
                         </SelectContent>
@@ -752,7 +754,7 @@ export default function Billing() {
                         <div className="flex flex-wrap gap-1 mt-1">
                           {secondaryUserIds.map(uid => (
                             <Badge key={uid} variant="secondary" className="text-[10px] gap-1">
-                              {profileLabel(allProfiles.find(p => p.user_id === uid) || { user_id: uid, display_name: uid.slice(0, 8), email: '' })}
+                              {profileLabel(allProfiles.find(p => p.user_id === uid) || { user_id: uid, display_name: uid.slice(0, 8), email: '', assignmentSummary: '' })}
                               {isEditable && <button onClick={() => setSecondaryUserIds(prev => prev.filter(x => x !== uid))} className="ml-0.5 hover:text-destructive">×</button>}
                             </Badge>
                           ))}
