@@ -48,6 +48,17 @@ export default function Layout() {
     };
 
     fetchData();
+
+    // Realtime subscription for patients, phases, treatment_plans
+    const channel = supabase
+      .channel('layout-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'patients' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'phases' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'treatment_plans' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'case_requests' }, () => fetchData())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [user, isAdmin]);
 
   const filteredPatients = useMemo(() => {
