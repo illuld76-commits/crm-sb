@@ -10,14 +10,16 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { UserPlus, X, Plus } from 'lucide-react';
+import { UserPlus, X, Plus, Star } from 'lucide-react';
 
 interface Assignment {
   type: 'patient' | 'clinic' | 'doctor' | 'lab' | 'company';
   value: string;
   expires_at: string | null;
+  is_primary: boolean;
 }
 
 interface CreateUserDialogProps {
@@ -35,6 +37,7 @@ export default function CreateUserDialog({ patients, onCreated }: CreateUserDial
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [assignType, setAssignType] = useState<'patient' | 'clinic' | 'doctor' | 'lab' | 'company'>('patient');
   const [assignValue, setAssignValue] = useState('');
+  const [assignIsPrimary, setAssignIsPrimary] = useState(false);
   const [loading, setLoading] = useState(false);
   const [entities, setEntities] = useState<{ id: string; entity_name: string; entity_type: string }[]>([]);
 
@@ -54,8 +57,10 @@ export default function CreateUserDialog({ patients, onCreated }: CreateUserDial
       type: assignType,
       value: assignValue,
       expires_at: expiresAt || null,
+      is_primary: assignIsPrimary,
     }]);
     setAssignValue('');
+    setAssignIsPrimary(false);
   };
 
   const removeAssignment = (index: number) => {
@@ -98,6 +103,7 @@ export default function CreateUserDialog({ patients, onCreated }: CreateUserDial
             type: a.type,
             value: a.value,
             expires_at: a.expires_at,
+            is_primary: a.is_primary,
           })),
         },
       });
@@ -193,12 +199,19 @@ export default function CreateUserDialog({ patients, onCreated }: CreateUserDial
                 <Plus className="w-4 h-4" />
               </Button>
             </div>
+            {assignType !== 'patient' && (
+              <div className="flex items-center gap-2 mt-1">
+                <Checkbox id="is_primary" checked={assignIsPrimary} onCheckedChange={(v) => setAssignIsPrimary(!!v)} />
+                <Label htmlFor="is_primary" className="text-xs cursor-pointer">Mark as Primary contact for this entity</Label>
+              </div>
+            )}
           </div>
 
           {assignments.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {assignments.map((a, i) => (
                 <Badge key={i} variant="secondary" className="gap-1 pr-1">
+                  {a.is_primary && <Star className="w-3 h-3 fill-yellow-500 text-yellow-500" />}
                   <span className="text-xs capitalize">{a.type}:</span>
                   <span className="text-xs font-medium">
                     {a.type === 'patient' ? patients.find(p => p.id === a.value)?.patient_name || a.value : a.value}

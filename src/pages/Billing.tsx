@@ -269,8 +269,8 @@ export default function Billing() {
     const clientAddr = crm.client
       ? crm.client.address
       : [p.clinic_name, p.doctor_name].filter(Boolean).join(' • ');
-    // Resolve primary user email as fallback
-    let resolvedEmail = crm.client?.email || patientFull?.contact_email || '';
+    // Resolve primary user email: CRM primaryUserEmail > entity email > patient contact email
+    let resolvedEmail = crm.primaryUserEmail || crm.client?.email || patientFull?.contact_email || '';
     if (!resolvedEmail) {
       const puId = patientFull?.primary_user_id || crm.primaryUserId;
       if (puId) {
@@ -290,6 +290,14 @@ export default function Billing() {
     // Resolve primary user from CRM if not set on patient
     if (!patientFull?.primary_user_id && crm.primaryUserId) {
       setPrimaryUserId(crm.primaryUserId);
+    }
+
+    // Auto-populate secondary users from entity circle
+    if (crm.entityCircleUserIds.length > 0) {
+      setSecondaryUserIds(prev => {
+        const merged = new Set([...prev, ...crm.entityCircleUserIds]);
+        return Array.from(merged);
+      });
     }
 
     // Merchant details from lab

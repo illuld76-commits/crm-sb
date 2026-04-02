@@ -1,0 +1,1 @@
+ALTER TABLE public.user_assignments ADD COLUMN is_primary boolean NOT NULL DEFAULT false;

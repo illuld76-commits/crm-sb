@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ArrowLeft, Trash2, UserCog, Edit, KeyRound } from 'lucide-react';
+import { ArrowLeft, Trash2, UserCog, Edit, KeyRound, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import SnaponLogo from '@/components/SnaponLogo';
@@ -21,7 +21,7 @@ interface TeamMember {
   display_name: string;
   role: 'admin' | 'user';
   password_hint: string | null;
-  assignments: { id: string; type: string; value: string; expires_at: string | null }[];
+  assignments: { id: string; type: string; value: string; expires_at: string | null; is_primary: boolean }[];
   created_at: string;
 }
 
@@ -62,7 +62,7 @@ export default function TeamManagement() {
         const role = roles.find(r => r.user_id === p.user_id);
         const userAssignments = (assignments || [])
           .filter(a => a.user_id === p.user_id)
-          .map(a => ({ id: a.id, type: a.assignment_type, value: a.assignment_value, expires_at: a.expires_at }));
+          .map(a => ({ id: a.id, type: a.assignment_type, value: a.assignment_value, expires_at: a.expires_at, is_primary: (a as any).is_primary || false }));
         memberMap[p.user_id] = {
           user_id: p.user_id, display_name: p.display_name || 'Unknown',
           role: (role?.role as 'admin' | 'user') || 'user', password_hint: p.password_hint,
@@ -78,6 +78,21 @@ export default function TeamManagement() {
     const { error } = await supabase.from('user_assignments').delete().eq('id', assignmentId);
     if (error) { toast.error('Failed to remove assignment'); return; }
     toast.success('Assignment removed');
+    fetchTeam();
+  };
+
+  const togglePrimary = async (assignment: TeamMember['assignments'][0]) => {
+    // If making primary, first unset any existing primary for this entity
+    if (!assignment.is_primary) {
+      await supabase.from('user_assignments')
+        .update({ is_primary: false } as any)
+        .eq('assignment_type', assignment.type)
+        .eq('assignment_value', assignment.value);
+    }
+    await supabase.from('user_assignments')
+      .update({ is_primary: !assignment.is_primary } as any)
+      .eq('id', assignment.id);
+    toast.success(assignment.is_primary ? 'Removed primary status' : 'Set as primary');
     fetchTeam();
   };
 
@@ -173,6 +188,9 @@ export default function TeamManagement() {
                           <span className="text-xs text-muted-foreground">{member.role === 'admin' ? 'Full access' : 'No assignments'}</span>
                         ) : member.assignments.map(a => (
                           <Badge key={a.id} variant="outline" className="gap-1 pr-1">
+                            <button onClick={() => togglePrimary(a)} className={`mr-0.5 ${a.is_primary ? 'text-yellow-500' : 'text-muted-foreground/30 hover:text-yellow-400'}`} title={a.is_primary ? 'Primary (click to unset)' : 'Set as primary'}>
+                              <Star className={`w-2.5 h-2.5 ${a.is_primary ? 'fill-yellow-500' : ''}`} />
+                            </button>
                             <span className="text-[10px] capitalize">{a.type}:</span>
                             <span className="text-[10px]">{a.type === 'patient' ? patients.find(p => p.id === a.value)?.patient_name || a.value : a.value}</span>
                             {a.expires_at && <span className="text-[9px] text-muted-foreground">exp:{format(new Date(a.expires_at), 'MM/dd')}</span>}
