@@ -231,6 +231,7 @@ export async function convertCaseToProject(
       place_of_supply: placeOfSupply || null,
       hsn_code: '9993',
       primary_user_id: crm.primaryUserId || null,
+      secondary_user_ids: crm.entityCircleUserIds.length > 0 ? crm.entityCircleUserIds as any : null,
     }).select('id').single();
     if (inv) invoiceId = inv.id;
   }
