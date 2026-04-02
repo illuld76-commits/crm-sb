@@ -199,6 +199,12 @@ export default function CreateUserDialog({ patients, onCreated }: CreateUserDial
                 <Plus className="w-4 h-4" />
               </Button>
             </div>
+            {assignType !== 'patient' && (
+              <div className="flex items-center gap-2 mt-1">
+                <Checkbox id="is_primary" checked={assignIsPrimary} onCheckedChange={(v) => setAssignIsPrimary(!!v)} />
+                <Label htmlFor="is_primary" className="text-xs cursor-pointer">Mark as Primary contact for this entity</Label>
+              </div>
+            )}
           </div>
 
           {assignments.length > 0 && (
