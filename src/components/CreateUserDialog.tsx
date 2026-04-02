@@ -57,8 +57,10 @@ export default function CreateUserDialog({ patients, onCreated }: CreateUserDial
       type: assignType,
       value: assignValue,
       expires_at: expiresAt || null,
+      is_primary: assignIsPrimary,
     }]);
     setAssignValue('');
+    setAssignIsPrimary(false);
   };
 
   const removeAssignment = (index: number) => {
