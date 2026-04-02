@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserScope } from '@/hooks/useUserScope';
 import { resolveCrmContacts } from '@/lib/crm-resolve';
+import { mergeUserIds, parseAssignmentSelection } from '@/lib/case-assignment';
 
 import Header from '@/components/Header';
 import { Button } from '@/components/ui/button';
@@ -141,6 +142,8 @@ export default function Billing() {
 
   // User assignment
   const [allProfiles, setAllProfiles] = useState<{ user_id: string; display_name: string | null; email?: string | null }[]>([]);
+  const profileLabel = (profile: { user_id: string; display_name: string | null; email?: string | null }) =>
+    [profile.display_name || 'Unnamed user', profile.email].filter(Boolean).join(' • ');
 
   useEffect(() => {
     supabase.from('presets').select('*').order('name').then(({ data }) => {
@@ -169,10 +172,10 @@ export default function Billing() {
       (async () => {
         const { data: patientFull } = await supabase.from('patients').select('*').eq('id', prefillPatientId).single();
         if (patientFull) {
+          const { data: linkedCaseRequest } = await supabase.from('case_requests').select('user_id, dynamic_data').eq('patient_id', prefillPatientId).eq('is_deleted', false).order('created_at', { ascending: false }).limit(1).maybeSingle();
+          const explicitAssignments = parseAssignmentSelection((linkedCaseRequest?.dynamic_data as Record<string, any> | undefined) || null);
           setPatientName(patientFull.patient_name);
           setClientDetails(prev => ({ ...prev, name: patientFull.patient_name }));
-          if (patientFull.primary_user_id) setPrimaryUserId(patientFull.primary_user_id);
-          if (patientFull.secondary_user_id) setSecondaryUserIds([patientFull.secondary_user_id]);
 
           // CRM resolution for auto-populating client/merchant details
           const crm = await resolveCrmContacts({
@@ -193,10 +196,10 @@ export default function Billing() {
           });
           if (crm.client?.gstNumber) setGstNumber(crm.client.gstNumber);
           if (crm.client?.state) setPlaceOfSupply(crm.client.state);
-          if (!patientFull.primary_user_id && crm.primaryUserId) setPrimaryUserId(crm.primaryUserId);
-          if (crm.entityCircleUserIds.length > 0) {
-            setSecondaryUserIds(prev => Array.from(new Set([...prev, ...crm.entityCircleUserIds])));
-          }
+          const resolvedPrimary = explicitAssignments.primaryUserId || patientFull.primary_user_id || crm.primaryUserId || null;
+          const resolvedSecondary = mergeUserIds(explicitAssignments.secondaryUserIds, patientFull.secondary_user_id, crm.entityCircleUserIds, linkedCaseRequest?.user_id).filter(uid => uid !== resolvedPrimary);
+          setPrimaryUserId(resolvedPrimary);
+          setSecondaryUserIds(resolvedSecondary);
           if (crm.merchant) {
             setMerchantDetails(prev => ({
               ...prev,
@@ -291,10 +294,8 @@ export default function Billing() {
 
     // Fetch full patient record
     const { data: patientFull } = await supabase.from('patients').select('*').eq('id', p.id).single();
-    if (patientFull) {
-      if (patientFull.primary_user_id) setPrimaryUserId(patientFull.primary_user_id);
-      if (patientFull.secondary_user_id) setSecondaryUserIds([patientFull.secondary_user_id]);
-    }
+    const { data: linkedCaseRequest } = await supabase.from('case_requests').select('user_id, dynamic_data').eq('patient_id', p.id).eq('is_deleted', false).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    const explicitAssignments = parseAssignmentSelection((linkedCaseRequest?.dynamic_data as Record<string, any> | undefined) || null);
 
     // Use CRM resolve for auto-population
     const crm = await resolveCrmContacts({
@@ -327,17 +328,10 @@ export default function Billing() {
     if (crm.client?.state) setPlaceOfSupply(crm.client.state);
 
     // Resolve primary user from CRM if not set on patient
-    if (!patientFull?.primary_user_id && crm.primaryUserId) {
-      setPrimaryUserId(crm.primaryUserId);
-    }
-
-    // Auto-populate secondary users from entity circle
-    if (crm.entityCircleUserIds.length > 0) {
-      setSecondaryUserIds(prev => {
-        const merged = new Set([...prev, ...crm.entityCircleUserIds]);
-        return Array.from(merged);
-      });
-    }
+    const resolvedPrimary = explicitAssignments.primaryUserId || patientFull?.primary_user_id || crm.primaryUserId || null;
+    const resolvedSecondary = mergeUserIds(explicitAssignments.secondaryUserIds, patientFull?.secondary_user_id, crm.entityCircleUserIds, linkedCaseRequest?.user_id).filter(uid => uid !== resolvedPrimary);
+    setPrimaryUserId(resolvedPrimary);
+    setSecondaryUserIds(resolvedSecondary);
 
     // Merchant details from lab
     if (crm.merchant) {
@@ -576,10 +570,11 @@ export default function Billing() {
   const addExpense = async () => {
     if (!invoiceId || !expDesc) return;
     const { data, error } = await supabase.from('expenses').insert({
-      invoice_id: invoiceId, patient_id: patientId, user_id: user!.id,
+      invoice_id: invoiceId, patient_id: patientId,
       vendor_name: expVendor, description: expDesc,
       amount: parseFloat(expAmount) || 0, currency,
       category: expCategory, is_billable: expBillable, notes: expNotes || null,
+      user_id: primaryUserId || user!.id,
     } as any).select().single();
     if (!error && data) {
       setExpenses(prev => [...prev, data as unknown as Expense]);
@@ -738,7 +733,7 @@ export default function Billing() {
                         <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select..." /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="__none__">None</SelectItem>
-                          {allProfiles.map(p => <SelectItem key={p.user_id} value={p.user_id}>{p.display_name || p.user_id.slice(0, 8)}</SelectItem>)}
+                          {allProfiles.map(p => <SelectItem key={p.user_id} value={p.user_id}>{profileLabel(p)}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
@@ -749,7 +744,7 @@ export default function Billing() {
                         <SelectContent>
                           <SelectItem value="__add__">Add user...</SelectItem>
                           {allProfiles.filter(p => !secondaryUserIds.includes(p.user_id)).map(p => (
-                            <SelectItem key={p.user_id} value={p.user_id}>{p.display_name || p.user_id.slice(0, 8)}</SelectItem>
+                            <SelectItem key={p.user_id} value={p.user_id}>{profileLabel(p)}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -757,7 +752,7 @@ export default function Billing() {
                         <div className="flex flex-wrap gap-1 mt-1">
                           {secondaryUserIds.map(uid => (
                             <Badge key={uid} variant="secondary" className="text-[10px] gap-1">
-                              {allProfiles.find(p => p.user_id === uid)?.display_name || uid.slice(0, 8)}
+                              {profileLabel(allProfiles.find(p => p.user_id === uid) || { user_id: uid, display_name: uid.slice(0, 8), email: '' })}
                               {isEditable && <button onClick={() => setSecondaryUserIds(prev => prev.filter(x => x !== uid))} className="ml-0.5 hover:text-destructive">×</button>}
                             </Badge>
                           ))}

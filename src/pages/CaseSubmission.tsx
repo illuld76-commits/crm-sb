@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
 import { useUserScope } from '@/hooks/useUserScope';
 import { supabase } from '@/integrations/supabase/client';
+import { getCompanyPeers } from '@/lib/company-scope';
 import Header from '@/components/Header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +23,8 @@ import { FileAttachment, Preset, CaseRequest } from '@/types';
 import FilePreviewModal from '@/components/FilePreviewModal';
 import ToothChartSelector, { ToothSelection } from '@/components/ToothChartSelector';
 import { convertCaseToProject } from '@/lib/case-conversion';
+import { resolveCrmContacts } from '@/lib/crm-resolve';
+import { mergeUserIds, parseAssignmentSelection } from '@/lib/case-assignment';
 import { format, formatDistanceToNow } from 'date-fns';
 
 export default function CaseSubmission() {
@@ -57,6 +60,9 @@ export default function CaseSubmission() {
 
   // Settings entities for dropdowns
   const [settingsEntities, setSettingsEntities] = useState<{ entity_name: string; entity_type: string }[]>([]);
+  const [allProfiles, setAllProfiles] = useState<{ user_id: string; display_name: string | null; email: string | null }[]>([]);
+  const [assignedPrimaryUserId, setAssignedPrimaryUserId] = useState<string | null>(null);
+  const [assignedSecondaryUserIds, setAssignedSecondaryUserIds] = useState<string[]>([]);
   const lastSyncedRequestType = useRef('');
   const itemIdCounter = useRef(0);
   const loadedCaseId = useRef<string | null>(null);
@@ -101,6 +107,16 @@ export default function CaseSubmission() {
     supabase.from('settings_entities').select('entity_name, entity_type').eq('is_deleted', false).order('entity_name').then(({ data }) => {
       setSettingsEntities(data || []);
     });
+
+    if (isAdmin) {
+      supabase.from('profiles').select('user_id, display_name, email').then(({ data }) => setAllProfiles(data || []));
+    } else if (user) {
+      getCompanyPeers(user.id).then(peerIds => {
+        supabase.from('profiles').select('user_id, display_name, email').then(({ data }) => {
+          setAllProfiles((data || []).filter(profile => peerIds.includes(profile.user_id)));
+        });
+      });
+    }
   }, []);
 
   // Effect 2: Auto-fill for single-assignment non-admin users (run once when scope loads)
@@ -126,6 +142,7 @@ export default function CaseSubmission() {
       if (data) {
         const typed = data as unknown as CaseRequest;
         const savedDynamic = ((typed.dynamic_data || {}) as Record<string, any>);
+        const savedAssignments = parseAssignmentSelection(savedDynamic);
         const savedWorkOrderForms = savedDynamic.work_order_forms && typeof savedDynamic.work_order_forms === 'object'
           ? savedDynamic.work_order_forms as Record<string, Record<string, any>>
           : null;
@@ -170,12 +187,39 @@ export default function CaseSubmission() {
             },
           });
         }
+        setAssignedPrimaryUserId(savedAssignments.primaryUserId);
+        setAssignedSecondaryUserIds(savedAssignments.secondaryUserIds);
         if (data.status !== 'draft') {
           setIsViewMode(true);
         }
       }
     });
   }, [id]);
+
+  useEffect(() => {
+    const syncAssignments = async () => {
+      const crm = await resolveCrmContacts({
+        clinic_name: formData.clinic_name || null,
+        doctor_name: formData.doctor_name || null,
+        lab_name: formData.lab_name || null,
+        company_name: formData.company_name || null,
+      });
+
+      if (!assignedPrimaryUserId && crm.primaryUserId) {
+        setAssignedPrimaryUserId(crm.primaryUserId);
+      }
+
+      const mergedSecondary = mergeUserIds(assignedSecondaryUserIds, crm.entityCircleUserIds, formData.doctor_name ? null : user?.id || null)
+        .filter(userId => userId !== (assignedPrimaryUserId || crm.primaryUserId));
+      setAssignedSecondaryUserIds(mergedSecondary);
+    };
+
+    if (!formData.clinic_name && !formData.doctor_name && !formData.lab_name && !formData.company_name) return;
+    syncAssignments();
+  }, [formData.clinic_name, formData.doctor_name, formData.lab_name, formData.company_name]);
+
+  const profileLabel = (profile: { display_name: string | null; email: string | null; user_id: string }) =>
+    [profile.display_name || 'Unnamed user', profile.email].filter(Boolean).join(' • ');
 
   // Auto-sync: when request_type changes, add it to selectedRequestTypes (guarded by ref to prevent flicker)
   useEffect(() => {
@@ -303,6 +347,8 @@ export default function CaseSubmission() {
         work_order_type: formData.request_type || null,
         dynamic_data: {
           ...(formData.company_name ? { company_name: formData.company_name } : {}),
+          ...(assignedPrimaryUserId ? { primary_user_id: assignedPrimaryUserId } : {}),
+          ...(assignedSecondaryUserIds.length > 0 ? { secondary_user_ids: assignedSecondaryUserIds } : {}),
           ...(Object.keys(cleanedWorkOrderForms).length > 0 ? { work_order_forms: cleanedWorkOrderForms } : {}),
         } as any,
       };
@@ -540,7 +586,20 @@ export default function CaseSubmission() {
                 {caseData.clinic_name && <div><span className="text-muted-foreground text-xs block">Clinic</span><span>{caseData.clinic_name}</span></div>}
                 {caseData.lab_name && <div><span className="text-muted-foreground text-xs block">Lab</span><span>{caseData.lab_name}</span></div>}
                   {((caseData.dynamic_data as any)?.company_name) && <div><span className="text-muted-foreground text-xs block">Company</span><span>{(caseData.dynamic_data as any).company_name}</span></div>}
+                {assignedPrimaryUserId && <div><span className="text-muted-foreground text-xs block">Primary User</span><span>{allProfiles.find(p => p.user_id === assignedPrimaryUserId)?.display_name || allProfiles.find(p => p.user_id === assignedPrimaryUserId)?.email || assignedPrimaryUserId}</span></div>}
               </div>
+              {assignedSecondaryUserIds.length > 0 && (
+                <div>
+                  <span className="text-muted-foreground text-xs block mb-1">Secondary Users</span>
+                  <div className="flex flex-wrap gap-1">
+                    {assignedSecondaryUserIds.map(uid => (
+                      <Badge key={uid} variant="secondary" className="text-[10px]">
+                        {allProfiles.find(p => p.user_id === uid)?.display_name || allProfiles.find(p => p.user_id === uid)?.email || uid}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
               {caseData.notes && (
                 <>
                   <Separator />
@@ -831,6 +890,51 @@ export default function CaseSubmission() {
                 </Select>
               </div>
             </div>
+
+            {allProfiles.length > 0 && (
+              <Card className="border-border/50">
+                <CardContent className="p-4 space-y-3">
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Assignments</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label>Primary User</Label>
+                      <Select value={assignedPrimaryUserId || '__none__'} onValueChange={v => setAssignedPrimaryUserId(v === '__none__' ? null : v)}>
+                        <SelectTrigger><SelectValue placeholder="Select primary user..." /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">None</SelectItem>
+                          {allProfiles.map(profile => <SelectItem key={profile.user_id} value={profile.user_id}>{profileLabel(profile)}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Secondary Users</Label>
+                      <Select value="__add__" onValueChange={v => {
+                        if (v === '__add__') return;
+                        setAssignedSecondaryUserIds(prev => mergeUserIds(prev, v).filter(userId => userId !== assignedPrimaryUserId));
+                      }}>
+                        <SelectTrigger><SelectValue placeholder="Add secondary user..." /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__add__">Add secondary user...</SelectItem>
+                          {allProfiles.filter(profile => profile.user_id !== assignedPrimaryUserId && !assignedSecondaryUserIds.includes(profile.user_id)).map(profile => (
+                            <SelectItem key={profile.user_id} value={profile.user_id}>{profileLabel(profile)}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {assignedSecondaryUserIds.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {assignedSecondaryUserIds.map(uid => (
+                        <Badge key={uid} variant="secondary" className="text-[10px] gap-1">
+                          {allProfiles.find(profile => profile.user_id === uid)?.display_name || allProfiles.find(profile => profile.user_id === uid)?.email || uid}
+                          <button type="button" onClick={() => setAssignedSecondaryUserIds(prev => prev.filter(id => id !== uid))}>×</button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Request Items (qty + billing) */}
             <Card className="border-border/50">
