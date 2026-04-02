@@ -180,13 +180,7 @@ export async function convertCaseToProject(
     }));
     const totalAmount = lineItems.reduce((s: number, li: any) => s + li.qty * li.rate, 0);
 
-    const companyName = (caseReq.dynamic_data as Record<string, any> | undefined)?.company_name || null;
-    const crm = await resolveCrmContacts({
-      company_name: companyName,
-      clinic_name: caseReq.clinic_name,
-      doctor_name: caseReq.doctor_name,
-      lab_name: caseReq.lab_name,
-    });
+    // Use already-resolved CRM contacts from step 1
 
     // Auto-populate CRM details with primary user email fallback
     let clientEmail = crm.client?.email || '';
