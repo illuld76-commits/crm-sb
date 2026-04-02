@@ -58,7 +58,7 @@ export default function BillingList() {
   useEffect(() => {
     if (!user) return;
     const fetchInvoices = async () => {
-      const { data } = await supabase.from('invoices').select('id, patient_name, patient_id, amount_usd, balance_due, status, created_at, type, display_id, invoice_number, due_date, case_request_id, is_deleted, user_id, secondary_user_ids')
+      const { data } = await supabase.from('invoices').select('id, patient_name, patient_id, amount_usd, balance_due, status, created_at, type, display_id, invoice_number, due_date, case_request_id, is_deleted, user_id, secondary_user_ids, client_details')
         .eq('is_deleted', false).order('created_at', { ascending: false });
 
       let rows = (data || []).map((d: any) => ({
@@ -68,10 +68,17 @@ export default function BillingList() {
         display_id: d.display_id, invoice_number: d.invoice_number, due_date: d.due_date,
         case_request_id: d.case_request_id, user_id: d.user_id,
         secondary_user_ids: d.secondary_user_ids,
+        client_entity_name: d.client_details?.name || null,
       }));
 
-      // RBAC: non-admin only sees their own invoices, secondary user invoices, or invoices linked to accessible patients
+      // RBAC: non-admin sees invoices they own, are secondary on, or share entity circle with
       if (!isAdmin) {
+        // Get user's entity assignments for circle matching
+        const { data: myAssignments } = await supabase.from('user_assignments')
+          .select('assignment_type, assignment_value')
+          .eq('user_id', user.id);
+        const myEntityValues = new Set((myAssignments || []).map(a => a.assignment_value));
+
         const patientIds = rows.filter((r: any) => r.patient_id).map((r: any) => r.patient_id);
         const uniqueIds = [...new Set(patientIds)];
         let accessibleIds = new Set<string>();
@@ -84,9 +91,10 @@ export default function BillingList() {
         rows = rows.filter((r: any) => {
           if (r.user_id === user.id) return true;
           if (r.patient_id && accessibleIds.has(r.patient_id)) return true;
-          // Secondary user visibility (view-only)
           const secIds = Array.isArray(r.secondary_user_ids) ? r.secondary_user_ids : [];
           if (secIds.includes(user.id)) return true;
+          // Entity circle: if invoice client entity name matches user's assignment
+          if (r.client_entity_name && myEntityValues.has(r.client_entity_name)) return true;
           return false;
         });
       }
