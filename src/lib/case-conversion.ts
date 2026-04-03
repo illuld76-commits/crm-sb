@@ -57,7 +57,7 @@ export async function convertCaseToProject(
   }
 
   // Resolve CRM contacts early for primary/secondary user tagging
-  const companyName = (caseReq.dynamic_data as Record<string, any> | undefined)?.company_name || null;
+  const companyName = companyVal;
   const crm = await resolveCrmContacts({
     company_name: companyName,
     clinic_name: caseReq.clinic_name,
