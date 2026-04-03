@@ -508,7 +508,7 @@ export default function PatientDetail() {
 
   const copyShareLink = (shareToken: string, type: 'plan' | 'journey') => {
     const path = type === 'journey' ? 'journey' : 'report';
-    navigator.clipboard.writeText(`${window.location.origin}/${path}/${shareToken}`);
+    navigator.clipboard.writeText(`${SHARE_BASE_URL}/${path}/${shareToken}`);
     toast.success('Share link copied!');
   };
 
