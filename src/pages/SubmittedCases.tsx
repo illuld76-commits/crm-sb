@@ -32,6 +32,7 @@ export default function SubmittedCases() {
   const [sortBy, setSortBy] = useState<SortOption>('date_desc');
   const [filterStatus, setFilterStatus] = useState('all');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [convertingIds, setConvertingIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     supabase.from('presets').select('*').order('name').then(({ data }) => {
