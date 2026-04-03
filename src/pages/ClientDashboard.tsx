@@ -177,7 +177,7 @@ export default function ClientDashboard() {
   const copyLink = (token: string, type: 'journey' | 'report', e?: React.MouseEvent) => {
     e?.stopPropagation();
     const path = type === 'journey' ? 'journey' : 'report';
-    navigator.clipboard.writeText(`${window.location.origin}/${path}/${token}`);
+    navigator.clipboard.writeText(`${SHARE_BASE_URL}/${path}/${token}`);
     toast.success(`${type === 'journey' ? 'Journey' : 'Report'} link copied!`);
   };
 
