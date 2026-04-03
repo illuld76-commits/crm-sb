@@ -30,6 +30,35 @@ export default function JourneyView() {
   useEffect(() => { if (token) loadJourney(token); }, [token]);
 
   const loadJourney = async (shareToken: string) => {
+    try {
+      // Try edge function first (works without auth)
+      const { data: fnData, error: fnErr } = await supabase.functions.invoke('get-shared-report', {
+        body: null,
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      // Build URL manually for GET with query params
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const baseUrl = import.meta.env.VITE_SUPABASE_URL || `https://${projectId}.supabase.co`;
+      const res = await fetch(`${baseUrl}/functions/v1/get-shared-report?token=${encodeURIComponent(shareToken)}&type=journey`);
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (data.error) { setError(data.error); setLoading(false); return; }
+        setPatient(data.patient);
+        setPhases(data.phases || []);
+        setOpenPhases(new Set((data.phases || []).map((p: any) => p.id)));
+        setPlans(data.plans || []);
+        setSections(data.sections || []);
+        setRemarks(data.remarks || []);
+        setLoading(false);
+        return;
+      }
+    } catch {
+      // Fallback to direct query (works if user is authenticated)
+    }
+
+    // Fallback: direct Supabase query (authenticated users)
     const { data: patientData, error: pErr } = await supabase.from('patients').select('*').eq('share_token', shareToken).single();
     if (pErr || !patientData) { setError('Patient journey not found.'); setLoading(false); return; }
     setPatient(patientData);
@@ -104,7 +133,6 @@ export default function JourneyView() {
                           {plan.notes && <p className="text-sm text-muted-foreground mt-2">{plan.notes}</p>}
                         </div>
 
-                        {/* Feasibility */}
                         {feasSecs.map((sec, idx) => sec.data_json && (
                           <Card key={idx} className="p-4 space-y-2">
                             <h4 className="text-sm font-semibold">{sec.caption || 'Feasibility Report'}</h4>
@@ -117,15 +145,12 @@ export default function JourneyView() {
                           </Card>
                         ))}
 
-                        {iprSecs.map((sec, idx) => {
-                          const iprData = sec.data_json as IPRData;
-                          return (
-                            <div key={idx} className="space-y-2">
-                              {sec.caption && <p className="text-sm font-medium">{sec.caption}</p>}
-                              <IPRQuadrantDiagram iprData={iprData} />
-                            </div>
-                          );
-                        })}
+                        {iprSecs.map((sec, idx) => (
+                          <div key={idx} className="space-y-2">
+                            {sec.caption && <p className="text-sm font-medium">{sec.caption}</p>}
+                            <IPRQuadrantDiagram iprData={sec.data_json as IPRData} />
+                          </div>
+                        ))}
                         {movSecs.map((sec, idx) => (
                           <div key={idx}>
                             {sec.caption && <p className="text-sm font-medium mb-2">{sec.caption}</p>}
@@ -133,7 +158,6 @@ export default function JourneyView() {
                           </div>
                         ))}
 
-                        {/* Images */}
                         {imgSecs.length > 0 && (
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {imgSecs.map((sec, idx) => (

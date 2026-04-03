@@ -15,7 +15,7 @@ import FilePreviewModal, { PreviewFile } from '@/components/FilePreviewModal';
 
 interface PlanData { plan_name: string; plan_date: string | null; notes: string | null; }
 interface SectionData { section_type: string; data_json: any; caption: string | null; file_url: string | null; sort_order: number; }
-interface RemarkData { remark_text: string; created_at: string; user_id: string; }
+interface RemarkData { remark_text: string; created_at: string; user_id?: string; }
 
 export default function ReportView() {
   const { token } = useParams();
@@ -29,6 +29,25 @@ export default function ReportView() {
   useEffect(() => { if (token) loadReport(token); }, [token]);
 
   const loadReport = async (shareToken: string) => {
+    try {
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const baseUrl = import.meta.env.VITE_SUPABASE_URL || `https://${projectId}.supabase.co`;
+      const res = await fetch(`${baseUrl}/functions/v1/get-shared-report?token=${encodeURIComponent(shareToken)}&type=report`);
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (data.error) { setError(data.error); setLoading(false); return; }
+        setPlanData(data.plan);
+        setSections(data.sections || []);
+        setRemarks(data.remarks || []);
+        setLoading(false);
+        return;
+      }
+    } catch {
+      // Fallback
+    }
+
+    // Fallback: direct Supabase query (authenticated users)
     const { data: plan, error: planErr } = await supabase.from('treatment_plans').select('*').eq('share_token', shareToken).eq('status', 'published').single();
     if (planErr || !plan) { setError('Report not found or not published.'); setLoading(false); return; }
     setPlanData(plan);
@@ -96,7 +115,6 @@ export default function ReportView() {
       {navItems.length > 1 && <ReportNav items={navItems} />}
 
       <main className="container mx-auto px-4 max-w-4xl py-8 space-y-8 print:py-4 print:space-y-4">
-        {/* Feasibility */}
         {feasibilitySections.length > 0 && (
           <div id="feasibility" className="scroll-mt-20 space-y-6">
             {feasibilitySections.map((section, idx) => (
@@ -148,7 +166,6 @@ export default function ReportView() {
           </div>
         )}
 
-        {/* Model Analysis */}
         {modelSections.length > 0 && (
           <div id="model" className="scroll-mt-20 space-y-6">
             {modelSections.map((section, idx) => (
@@ -191,7 +208,6 @@ export default function ReportView() {
           </div>
         )}
 
-        {/* Cephalometric */}
         {cephSections.length > 0 && (
           <div id="ceph" className="scroll-mt-20 space-y-6">
             {cephSections.map((section, idx) => (
@@ -238,7 +254,6 @@ export default function ReportView() {
           </div>
         )}
 
-        {/* Images */}
         {imageSections.length > 0 && (
           <div id="images" className="scroll-mt-20 space-y-6">
             <Card className="print:shadow-none print:border">
