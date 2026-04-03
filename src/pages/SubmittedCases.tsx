@@ -91,21 +91,41 @@ export default function SubmittedCases() {
   }, [cases, search, sortBy, filterStatus]);
 
   const updateStatus = async (id: string, newStatus: CaseRequest['status']) => {
-    // If accepting, auto-convert to project (even if patient_id already exists — creates new phase)
     if (newStatus === 'accepted' && user) {
-      const caseReq = cases.find(c => c.id === id);
-      if (caseReq) {
-        const result = await convertCaseToProject(caseReq, presets, user.id);
-        if (result) {
-          setCases(prev => prev.map(c => c.id === id ? { ...c, status: 'accepted', patient_id: result.patientId } : c));
-          toast.success('Case accepted — project, phase, plan & draft invoice created');
-          return;
-        } else {
-          toast.error('Failed to convert case to project');
+      if (convertingIds.has(id)) return; // prevent double-click
+      setConvertingIds(prev => new Set(prev).add(id));
+      try {
+        // Re-fetch to check idempotency
+        const { data: fresh } = await supabase.from('case_requests').select('converted_at').eq('id', id).single();
+        if (fresh?.converted_at) {
+          toast.info('Case already converted');
+          setCases(prev => prev.map(c => c.id === id ? { ...c, status: 'accepted' } : c));
           return;
         }
+        const caseReq = cases.find(c => c.id === id);
+        if (caseReq) {
+          const result = await convertCaseToProject(caseReq, presets, user.id);
+          if (result) {
+            setCases(prev => prev.map(c => c.id === id ? { ...c, status: 'accepted', patient_id: result.patientId } : c));
+            toast.success('Case accepted — project, phase, plan & draft invoice created');
+            return;
+          } else {
+            toast.error('Failed to convert case to project');
+            return;
+          }
+        }
+      } finally {
+        setConvertingIds(prev => { const next = new Set(prev); next.delete(id); return next; });
       }
     }
+    const { error } = await supabase.from('case_requests').update({ status: newStatus }).eq('id', id);
+    if (!error) {
+      setCases(prev => prev.map(c => c.id === id ? { ...c, status: newStatus } : c));
+      toast.success(`Case ${newStatus.replace('_', ' ')}`);
+    } else {
+      toast.error('Failed to update status');
+    }
+  };
     const { error } = await supabase.from('case_requests').update({ status: newStatus }).eq('id', id);
     if (!error) {
       setCases(prev => prev.map(c => c.id === id ? { ...c, status: newStatus } : c));
