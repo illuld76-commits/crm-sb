@@ -126,14 +126,8 @@ export default function SubmittedCases() {
       toast.error('Failed to update status');
     }
   };
-    const { error } = await supabase.from('case_requests').update({ status: newStatus }).eq('id', id);
-    if (!error) {
-      setCases(prev => prev.map(c => c.id === id ? { ...c, status: newStatus } : c));
-      toast.success(`Case ${newStatus.replace('_', ' ')}`);
-    } else {
-      toast.error('Failed to update status');
-    }
-  };
+
+
 
   const softDelete = async (id: string) => {
     const { error } = await supabase.from('case_requests').update({ is_deleted: true }).eq('id', id);
