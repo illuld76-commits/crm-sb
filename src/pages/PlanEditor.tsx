@@ -331,7 +331,7 @@ export default function PlanEditor() {
     const { error } = await supabase.from('treatment_plans').update({ status: 'published' }).eq('id', planId);
     if (error) { toast.error('Failed to publish'); } else {
       setPlanStatus('published');
-      const url = `${window.location.origin}/report/${shareToken}`;
+      const url = `${SHARE_BASE_URL}/report/${shareToken}`;
       navigator.clipboard.writeText(url);
       toast.success('Published! Share link copied.');
       await logAction({ action: 'Publish Plan', target_type: 'plan', target_id: planId, target_name: planName, user_id: user?.id || '', user_name: user?.email || '', details: 'Plan published and share link generated' });

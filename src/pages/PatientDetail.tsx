@@ -923,7 +923,7 @@ export default function PatientDetail() {
                                   {plan.notes && <p className="text-xs text-muted-foreground mt-1">{plan.notes}</p>}
                                   {plan.share_token && plan.status === 'published' && (
                                     <div className="flex items-center gap-2 mt-1">
-                                      <Badge variant="default" className="text-[9px] gap-1 cursor-pointer" onClick={() => window.open(`${window.location.origin}/report/${plan.share_token}`, '_blank')}>
+                                      <Badge variant="default" className="text-[9px] gap-1 cursor-pointer" onClick={() => window.open(`${SHARE_BASE_URL}/report/${plan.share_token}`, '_blank')}>
                                         <ExternalLink className="w-2.5 h-2.5" /> Published Report
                                       </Badge>
                                     </div>

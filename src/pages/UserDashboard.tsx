@@ -341,7 +341,7 @@ export default function UserDashboard() {
                                     {plan.status === 'published' && plan.share_token && (
                                       <Button variant="ghost" size="icon" className="h-6 w-6" onClick={e => {
                                         e.stopPropagation();
-                                        const url = `${window.location.origin}/report/${plan.share_token}`;
+                                        const url = `${SHARE_BASE_URL}/report/${plan.share_token}`;
                                         navigator.clipboard.writeText(url);
                                         toast.success('Share link copied!');
                                       }}>
