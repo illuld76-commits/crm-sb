@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { SHARE_BASE_URL } from '@/lib/share-utils';
 import { formatDistanceToNow } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
