@@ -28,15 +28,25 @@ export async function convertCaseToProject(
   let patientId = caseReq.patient_id || null;
 
   if (!patientId) {
-    const { data: existingConverted } = await supabase
+    // Normalize empty strings to null for matching
+    const clinicVal = caseReq.clinic_name?.trim() || null;
+    const doctorVal = caseReq.doctor_name?.trim() || null;
+    const labVal = caseReq.lab_name?.trim() || null;
+    const companyVal = ((caseReq.dynamic_data as Record<string, any> | undefined)?.company_name as string | null)?.trim() || null;
+
+    let matchQuery = supabase
       .from('patients')
       .select('id')
       .eq('patient_name', caseReq.patient_name)
-      .eq('user_id', caseReq.user_id)
-      .eq('clinic_name', caseReq.clinic_name || null)
-      .eq('doctor_name', caseReq.doctor_name || null)
-      .eq('lab_name', caseReq.lab_name || null)
-      .eq('company_name', ((caseReq.dynamic_data as Record<string, any> | undefined)?.company_name as string | null) || null)
+      .eq('user_id', caseReq.user_id);
+
+    // Handle null vs empty for each field
+    if (clinicVal) { matchQuery = matchQuery.eq('clinic_name', clinicVal); } else { matchQuery = matchQuery.or('clinic_name.is.null,clinic_name.eq.'); }
+    if (doctorVal) { matchQuery = matchQuery.eq('doctor_name', doctorVal); } else { matchQuery = matchQuery.or('doctor_name.is.null,doctor_name.eq.'); }
+    if (labVal) { matchQuery = matchQuery.eq('lab_name', labVal); } else { matchQuery = matchQuery.or('lab_name.is.null,lab_name.eq.'); }
+    if (companyVal) { matchQuery = matchQuery.eq('company_name', companyVal); } else { matchQuery = matchQuery.or('company_name.is.null,company_name.eq.'); }
+
+    const { data: existingConverted } = await matchQuery
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -47,7 +57,7 @@ export async function convertCaseToProject(
   }
 
   // Resolve CRM contacts early for primary/secondary user tagging
-  const companyName = (caseReq.dynamic_data as Record<string, any> | undefined)?.company_name || null;
+  const companyName = ((caseReq.dynamic_data as Record<string, any> | undefined)?.company_name as string | null)?.trim() || null;
   const crm = await resolveCrmContacts({
     company_name: companyName,
     clinic_name: caseReq.clinic_name,

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { SHARE_BASE_URL } from '@/lib/share-utils';
 import { formatDistanceToNow } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -212,7 +213,7 @@ export default function Dashboard() {
   const copyLink = (token: string, type: 'journey' | 'report', e?: React.MouseEvent) => {
     e?.stopPropagation();
     const path = type === 'journey' ? 'journey' : 'report';
-    navigator.clipboard.writeText(`${window.location.origin}/${path}/${token}`);
+    navigator.clipboard.writeText(`${SHARE_BASE_URL}/${path}/${token}`);
     toast.success(`${type === 'journey' ? 'Journey' : 'Report'} link copied!`);
   };
 
@@ -301,7 +302,7 @@ export default function Dashboard() {
                             <Button variant="ghost" size="icon" className="h-5 w-5" onClick={e => { e.stopPropagation(); copyLink(plan.share_token!, 'report', e); }} title="Copy report link">
                               <Copy className="w-2.5 h-2.5" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={e => { e.stopPropagation(); window.open(`${window.location.origin}/report/${plan.share_token}`, '_blank'); }} title="Open published report">
+                            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={e => { e.stopPropagation(); window.open(`${SHARE_BASE_URL}/report/${plan.share_token}`, '_blank'); }} title="Open published report">
                               <ChevronRight className="w-2.5 h-2.5" />
                             </Button>
                           </>
